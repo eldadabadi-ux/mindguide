@@ -1,0 +1,2928 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindGuide — Local</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e0e12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MindGuide">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas:      #F5F7FB;
+  --surface:     #FFFFFF;
+  --brand:       #2F88F5;
+  --brand-light: #EAF4FF;
+  --text-1:      #1B1530;
+  --text-2:      #4A4260;
+  --text-3:      #8A94A6;
+  --divider:     #EEF1F6;
+  --green:       #1E8A50;
+  --orange:      #D97000;
+  --red:         #E03E3E;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { overscroll-behavior: none; }
+body {
+  font-family: 'Assistant', sans-serif;
+  background: #0F0F1A;
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+/* ─── Phone shell ─── */
+.phone {
+  width: 390px;
+  min-height: 844px;
+  background: var(--canvas);
+  border-radius: 48px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px #2a2a3a, 0 0 0 10px #1a1a2a, 0 0 0 12px #2a2a3a, 0 40px 80px rgba(0,0,0,.7);
+  display: flex;
+  flex-direction: column;
+}
+.phone::before {
+  content: '';
+  position: absolute;
+  top: 12px; left: 50%; transform: translateX(-50%);
+  width: 120px; height: 30px;
+  background: #1a1a2a;
+  border-radius: 20px;
+  z-index: 200;
+}
+
+/* ─── Mobile: fill viewport, no desktop phone frame, no scroll bounce ─── */
+@media (max-width: 500px) {
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    position: fixed;
+    top: 0; left: 0;
+    touch-action: pan-y;
+  }
+  body {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .phone {
+    width: 100vw;
+    min-height: 100vh;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+    max-width: 100vw;
+  }
+  .phone::before { display: none; }
+  .sbar { display: none; }
+}
+
+/* ─── Screens ─── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+  overflow: hidden;
+}
+.screen.active { opacity: 1; pointer-events: all; }
+
+/* ─── Status bar ─── */
+.sbar {
+  height: 52px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 26px 8px;
+  flex-shrink: 0;
+}
+.sbar-time { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.sbar-icons { display: flex; gap: 5px; align-items: center; }
+.sbar-sig { width: 15px; height: 11px; background: var(--text-1); border-radius: 2px; opacity: .4; }
+.sbar-wifi { width: 16px; height: 12px; background: var(--text-1); border-radius: 2px; opacity: .4; }
+.sbar-batt { width: 24px; height: 12px; background: var(--text-1); border-radius: 3px; opacity: .4; }
+
+/* ─── Header ─── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 20px 14px;
+  flex-shrink: 0;
+}
+.header-title { font-size: 22px; font-weight: 800; color: var(--text-1); }
+.header-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.hbtns { display: flex; gap: 8px; }
+.hbtn {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: transform .12s, background .12s;
+  color: var(--text-2);
+  user-select: none;
+}
+.hbtn:active { transform: scale(.88); background: var(--brand-light); }
+
+/* ─── Icon helper ─── */
+.ic { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ic svg { display: block; }
+
+/* ─── Scroll ─── */
+.scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.scroll::-webkit-scrollbar { width: 4px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 4px; }
+
+/* ─── Section label ─── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  padding: 0 20px;
+  margin: 14px 0 7px;
+}
+
+/* ─── Card ─── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 20px;
+  box-shadow: 0 2px 8px rgba(16,30,54,.05);
+}
+
+/* ─── Buttons ─── */
+.btn {
+  border: none;
+  border-radius: 14px;
+  font-family: 'Assistant', sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform .12s;
+  user-select: none;
+}
+.btn:active { transform: scale(.95); }
+.btn-primary { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(47,136,245,.3); padding: 13px 22px; font-size: 15px; }
+.btn-ghost { background: var(--canvas); color: var(--text-2); border: 1px solid var(--divider); padding: 12px 20px; font-size: 14px; }
+.btn-danger { background: #FEE7EB; color: var(--red); padding: 12px 20px; font-size: 14px; }
+
+/* ─── Row item ─── */
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+  transition: background .1s;
+}
+.row-item:last-child { border-bottom: none; }
+.row-item:active { background: var(--canvas); }
+.icon-tile {
+  width: 42px; height: 42px;
+  border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* ─── Tab bar ─── */
+.tabbar {
+  height: 78px;
+  background: var(--surface);
+  border-top: 1px solid var(--divider);
+  display: flex;
+  padding: 0 8px 12px;
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 7px 0;
+  transition: background .12s;
+  user-select: none;
+  color: var(--text-3);
+}
+.tab:active { background: var(--brand-light); }
+.tab-dot { width: 5px; height: 5px; border-radius: 3px; background: var(--brand); display: none; }
+.tab-lbl { font-size: 10px; font-weight: 600; color: inherit; }
+.tab.active { color: var(--brand); }
+.tab.active .tab-dot { display: block; }
+
+/* ─── Voice FAB (half-circle above tabbar) ─── */
+.voice-fab {
+  position: absolute;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 76px;
+  height: 40px;
+  border-top-left-radius: 76px;
+  border-top-right-radius: 76px;
+  border-bottom: 0;
+  background: linear-gradient(135deg, #2F88F5 0%, #1E5BC6 100%);
+  border: 1px solid var(--divider);
+  border-bottom: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+  cursor: pointer;
+  box-shadow: 0 -4px 14px rgba(47, 136, 245, 0.35);
+  z-index: 20;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.voice-fab:active { transform: translateX(-50%) scale(0.95); }
+.voice-fab.active {
+  background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%);
+  animation: voice-pulse 1.6s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 -4px 14px rgba(239, 68, 68, 0.4); }
+  50%      { box-shadow: 0 -4px 24px rgba(239, 68, 68, 0.85); }
+}
+
+/* ─── Avatar ─── */
+.avatar-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+}
+.avatar-slot img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+.avatar-edit-pen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  cursor: pointer;
+  color: #fff;
+}
+.avatar-edit-pen:active { background: rgba(255,255,255,.35); }
+
+/* Avatar edit screen */
+.ae-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 20px 4px;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ae-arrow {
+  flex-shrink: 0;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 26px; line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Assistant', sans-serif;
+}
+.ae-arrow:active { background: var(--brand-light); color: var(--brand); transform: scale(.94); }
+.ae-preview {
+  width: 160px; height: 160px;
+  border-radius: 50%;
+  margin: 0;
+  background: var(--canvas);
+  overflow: hidden;
+  border: 3px solid var(--brand-light);
+  flex-shrink: 0;
+  transition: transform .22s ease, opacity .22s ease;
+}
+.ae-preview.swipe-out-left  { transform: translateX(-36%); opacity: 0; }
+.ae-preview.swipe-out-right { transform: translateX(36%);  opacity: 0; }
+.ae-preview img { width: 100%; height: 100%; object-fit: cover; }
+.ae-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  margin: 2px 0 14px;
+}
+.ae-section { padding: 0 20px; margin-bottom: 14px; }
+.ae-label { font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 7px; }
+.ae-color-row { display: flex; gap: 9px; flex-wrap: wrap; }
+.ae-color {
+  width: 32px; height: 32px; border-radius: 50%;
+  cursor: pointer; border: 2px solid transparent;
+  transition: transform .1s;
+}
+.ae-color.active { border-color: var(--brand); transform: scale(1.12); }
+.ae-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--text-1);
+  font-family: 'Assistant', sans-serif;
+}
+.ae-gender-row { display: flex; gap: 10px; }
+.ae-gender-btn {
+  flex: 1;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Assistant', sans-serif;
+  color: var(--text-2);
+}
+.ae-gender-btn.active {
+  background: var(--brand-light);
+  color: var(--brand);
+  border-color: var(--brand);
+}
+
+/* ─── Hub ─── */
+.stats-row { display: flex; gap: 9px; padding: 0 20px; margin-bottom: 16px; }
+.stat-chip {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 16px;
+  padding: 11px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform .12s;
+}
+.stat-chip:active { transform: scale(.93); }
+.stat-chip-val { font-size: 16px; font-weight: 800; color: var(--text-1); line-height: 1; }
+.stat-chip-lbl { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+
+.ai-cta {
+  margin: 0 20px 16px;
+  background: linear-gradient(135deg, #4E9EFF 0%, #2F88F5 55%, #1D72DC 100%);
+  border-radius: 24px;
+  padding: 18px 16px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(47,136,245,.32);
+  transition: transform .15s;
+  user-select: none;
+}
+.ai-cta:active { transform: scale(.97); }
+.ai-orb {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+}
+.ai-cta-text { flex: 1; color: #fff; }
+.ai-cta-title { font-size: 15px; font-weight: 800; }
+.ai-cta-sub { font-size: 12px; opacity: .8; margin-top: 2px; }
+
+.quick-actions {
+  display: flex;
+  gap: 9px;
+  padding: 10px 18px;
+  background: var(--surface);
+  border-top: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+.qa-btn {
+  flex: 1;
+  background: var(--canvas);
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  padding: 9px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: transform .12s, background .12s;
+  user-select: none;
+  color: var(--text-2);
+}
+.qa-btn:active { transform: scale(.88); background: var(--brand-light); color: var(--brand); }
+.qa-lbl { font-size: 10px; font-weight: 600; color: inherit; font-family: 'Assistant', sans-serif; }
+
+/* ─── Companion / Chat ─── */
+.comp-header {
+  background: linear-gradient(180deg, #1a6cd8 0%, #2F88F5 100%);
+  padding: 0 20px 22px;
+  flex-shrink: 0;
+}
+.comp-toprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 56px;
+  margin-bottom: 16px;
+}
+.back-btn {
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #fff;
+  transition: background .12s;
+  user-select: none;
+}
+.back-btn:active { background: rgba(255,255,255,.32); }
+.comp-name { font-size: 17px; font-weight: 800; color: #fff; }
+.comp-orb {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  position: relative;
+}
+.comp-orb::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.22);
+}
+.comp-status { font-size: 12px; color: rgba(255,255,255,.75); text-align: center; margin-top: 8px; }
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-list::-webkit-scrollbar { width: 4px; }
+.chat-list::-webkit-scrollbar-thumb { background: var(--divider); border-radius: 4px; }
+
+.bubble {
+  max-width: 78%;
+  padding: 11px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.bubble-ai {
+  background: var(--surface);
+  color: var(--text-1);
+  border: 1px solid var(--divider);
+  align-self: flex-start;
+  border-bottom-right-radius: 6px;
+}
+.bubble-user {
+  background: var(--brand);
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-left-radius: 6px;
+}
+.bubble-time { font-size: 10px; color: var(--text-3); margin-top: 5px; }
+.bubble-time-user { color: rgba(255,255,255,.55); text-align: left; }
+.bubble-save-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--brand-light);
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 99px;
+  cursor: pointer;
+  border: none;
+  font-family: 'Assistant', sans-serif;
+  transition: transform .1s;
+}
+.bubble-save-btn:active { transform: scale(.93); }
+
+.typing {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 12px 15px;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 20px;
+  border-bottom-right-radius: 6px;
+  align-self: flex-start;
+  opacity: 0;
+  transition: opacity .2s;
+  pointer-events: none;
+}
+.typing.show { opacity: 1; }
+.typing-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-7px)} }
+
+.chat-inputbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  margin-bottom: 38px; /* lift above voice-fab so it doesn't get covered */
+  background: var(--surface);
+  border-top: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+.chat-input {
+  flex: 1;
+  background: var(--canvas);
+  border: 1.5px solid var(--divider);
+  border-radius: 24px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-family: 'Assistant', sans-serif;
+  color: var(--text-1);
+  outline: none;
+  direction: rtl;
+  transition: border-color .15s;
+}
+.chat-input:focus { border-color: var(--brand); }
+.chat-input::placeholder { color: var(--text-3); }
+.send-btn {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(47,136,245,.4);
+  transition: transform .12s, box-shadow .12s;
+  flex-shrink: 0;
+}
+.send-btn:active { transform: scale(.86); box-shadow: none; }
+.send-btn:disabled { background: var(--divider); box-shadow: none; cursor: not-allowed; }
+
+/* ─── Memories screen ─── */
+.memory-empty {
+  padding: 50px 20px;
+  text-align: center;
+}
+.memory-empty-icon { font-size: 48px; margin-bottom: 12px; }
+.memory-empty-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+.memory-empty-sub { font-size: 13px; color: var(--text-3); line-height: 1.5; }
+
+.memory-item {
+  margin: 0 20px 10px;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 16px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: transform .12s;
+}
+.memory-item:active { transform: scale(.98); }
+.memory-item-text { font-size: 14px; font-weight: 600; color: var(--text-1); margin-bottom: 5px; line-height: 1.4; }
+.memory-item-meta { font-size: 11px; color: var(--text-3); }
+
+/* ─── Settings screen ─── */
+.profile-card {
+  margin: 0 20px 16px;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 22px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.profile-avatar {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4E9EFF, #1D72DC);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+.profile-info { flex: 1; }
+.profile-name { font-size: 18px; font-weight: 800; color: var(--text-1); }
+.profile-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.api-badge {
+  background: #E8F8EF;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 99px;
+}
+
+/* ─── Setup screen ─── */
+#setup-screen {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(160deg, #0A0A18 0%, #0F1529 50%, #0A0A18 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.setup-card {
+  background: #111125;
+  border: 1px solid rgba(47,136,245,.2);
+  border-radius: 28px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 0 60px rgba(47,136,245,.12);
+}
+.setup-logo { font-size: 36px; font-weight: 900; color: #fff; margin-bottom: 4px; }
+.setup-logo span { color: var(--brand); }
+.setup-tagline { font-size: 14px; color: rgba(255,255,255,.45); margin-bottom: 36px; }
+.setup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.step-num {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: rgba(47,136,245,.2);
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.step-text { font-size: 14px; color: rgba(255,255,255,.75); line-height: 1.5; margin-top: 3px; }
+.step-link {
+  display: inline-block;
+  margin-top: 6px;
+  background: rgba(47,136,245,.15);
+  border: 1px solid rgba(47,136,245,.3);
+  color: #6EB5FF;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .15s;
+}
+.step-link:hover { background: rgba(47,136,245,.25); }
+.setup-divider { height: 1px; background: rgba(255,255,255,.08); margin: 28px 0; }
+.setup-input-label { font-size: 12px; font-weight: 700; color: rgba(255,255,255,.45); letter-spacing: .4px; margin-bottom: 8px; }
+.setup-input {
+  width: 100%;
+  background: rgba(255,255,255,.06);
+  border: 1.5px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-family: 'Assistant', sans-serif;
+  color: #fff;
+  outline: none;
+  direction: ltr;
+  text-align: left;
+  transition: border-color .15s;
+  margin-bottom: 14px;
+}
+.setup-input:focus { border-color: var(--brand); }
+.setup-input::placeholder { color: rgba(255,255,255,.25); }
+.setup-btn {
+  width: 100%;
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 15px;
+  font-size: 16px;
+  font-weight: 800;
+  font-family: 'Assistant', sans-serif;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(47,136,245,.4);
+  transition: transform .12s, box-shadow .12s;
+}
+.setup-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(47,136,245,.5); }
+.setup-btn:active { transform: scale(.97); box-shadow: none; }
+.setup-error {
+  background: rgba(224,62,62,.12);
+  border: 1px solid rgba(224,62,62,.3);
+  color: #FF8A8A;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-top: 10px;
+  display: none;
+}
+
+/* ─── Toast ─── */
+.toast {
+  position: fixed;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1B1530;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 500;
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  opacity: 0;
+  transition: opacity .2s;
+  pointer-events: none;
+  font-family: 'Assistant', sans-serif;
+}
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+  z-index: 60;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-sheet {
+  width: 100%;
+  background: var(--surface);
+  border-radius: 26px 26px 0 0;
+  padding: 20px 20px 32px;
+  transform: translateY(100%);
+  transition: transform .3s cubic-bezier(.32,.72,0,1);
+}
+.modal-overlay.open .modal-sheet { transform: translateY(0); }
+.modal-handle { width: 38px; height: 4px; background: var(--divider); border-radius: 2px; margin: 0 auto 18px; }
+.modal-title { font-size: 19px; font-weight: 800; color: var(--text-1); margin-bottom: 16px; }
+.form-label { font-size: 11px; font-weight: 700; color: var(--text-3); letter-spacing: .4px; margin-bottom: 6px; }
+.form-input {
+  width: 100%;
+  background: var(--canvas);
+  border: 1.5px solid var(--divider);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: 'Assistant', sans-serif;
+  color: var(--text-1);
+  outline: none;
+  direction: rtl;
+  transition: border-color .15s;
+  margin-bottom: 14px;
+}
+.form-input:focus { border-color: var(--brand); }
+.form-row { display: flex; gap: 9px; }
+.form-row .fg { flex: 1; }
+
+/* ─── API key settings ─── */
+.apikey-display {
+  background: var(--canvas);
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-2);
+  font-family: monospace;
+  letter-spacing: .5px;
+  word-break: break-all;
+}
+
+/* ─── Mic button ─── */
+.mic-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--canvas); border: 1.5px solid var(--divider);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-2);
+  transition: all .15s; flex-shrink: 0;
+}
+.mic-btn.recording {
+  background: #FEE7EB; border-color: var(--red); color: var(--red);
+  animation: pulse-mic .8s ease-in-out infinite;
+}
+@keyframes pulse-mic {
+  0%,100% { transform:scale(1); box-shadow:0 0 0 0 rgba(224,62,62,.3); }
+  50%      { transform:scale(1.1); box-shadow:0 0 0 8px rgba(224,62,62,0); }
+}
+
+/* ─── Style chips ─── */
+.style-chips { display:flex; flex-wrap:wrap; gap:7px; padding:4px 20px 8px; }
+.style-chip {
+  padding:7px 13px; border-radius:99px; font-size:12px; font-weight:700;
+  border:1.5px solid var(--divider); background:var(--surface); color:var(--text-2);
+  cursor:pointer; font-family:'Assistant',sans-serif; transition:all .12s; user-select:none;
+}
+.style-chip.active { background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 3px 10px rgba(47,136,245,.3); }
+.style-chip:active { transform:scale(.93); }
+
+/* ─── Voice selector ─── */
+.voice-select {
+  width:100%; background:var(--canvas); border:1.5px solid var(--divider);
+  border-radius:12px; padding:11px 14px; font-size:13px;
+  font-family:'Assistant',sans-serif; color:var(--text-1); outline:none; direction:rtl; cursor:pointer;
+}
+
+/* ─── Speak button on bubble ─── */
+.speak-btn {
+  background:none; border:none; cursor:pointer; color:var(--text-3);
+  padding:3px; display:inline-flex; align-items:center;
+  transition:color .1s; vertical-align:middle;
+}
+.speak-btn:hover { color:var(--brand); }
+.speak-btn.speaking { color:var(--brand); animation:pulse-mic .8s ease-in-out infinite; }
+
+/* ─── Toggle switch ─── */
+.toggle-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 16px; border-bottom:1px solid var(--divider);
+}
+.toggle-row:last-child { border-bottom:none; }
+.toggle-switch {
+  width:42px; height:24px; border-radius:12px; background:var(--divider);
+  position:relative; cursor:pointer; transition:background .2s;
+  flex-shrink:0; border:none;
+}
+.toggle-switch.on { background:var(--brand); }
+.toggle-switch::after {
+  content:''; position:absolute; width:20px; height:20px; border-radius:50%;
+  background:#fff; top:2px; left:2px; transition:transform .2s;
+  box-shadow:0 1px 4px rgba(0,0,0,.2);
+}
+.toggle-switch.on::after { transform:translateX(18px); }
+.voice-settings-inner { padding:0; display:flex; flex-direction:column; }
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP SCREEN ══ -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-logo">Mind<span>Guide</span></div>
+    <div class="setup-tagline">המוח החיצוני שלך — מופעל על ידי Gemini AI</div>
+
+    <div class="setup-step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        פתח את Google AI Studio וצור מפתח API חינמי<br>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="step-link">פתח AI Studio ←</a>
+      </div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">2</div>
+      <div class="step-text">לחץ על <strong style="color:#fff">"Create API key"</strong> ← בחר project ← העתק את המפתח</div>
+    </div>
+    <div class="setup-step">
+      <div class="step-num">3</div>
+      <div class="step-text">הדבק את המפתח כאן ← לחץ התחל</div>
+    </div>
+
+    <div class="setup-divider"></div>
+
+    <div class="setup-input-label">מפתח API שלך (Gemini — חינמי לגמרי)</div>
+    <input
+      class="setup-input"
+      id="apiKeyInput"
+      type="password"
+      placeholder="AIza..."
+      autocomplete="off"
+    />
+    <button class="setup-btn" onclick="startApp()">התחל →</button>
+    <div class="setup-error" id="setupError"></div>
+  </div>
+</div>
+
+<!-- ══ PHONE ══ -->
+<div class="phone" id="phone" style="display:none">
+
+<!-- ── HUB ── -->
+<div class="screen active" id="s-hub">
+  <div class="sbar">
+    <span class="sbar-time" id="clockEl">9:41</span>
+    <div class="sbar-icons">
+      <div class="sbar-sig"></div>
+      <div class="sbar-wifi"></div>
+      <div class="sbar-batt"></div>
+    </div>
+  </div>
+  <div class="header">
+    <div>
+      <div class="header-title">MindGuide</div>
+      <div class="header-sub" id="greetEl">שלום! 👋</div>
+    </div>
+    <div class="hbtns">
+      <div class="hbtn" onclick="showModal('m-reminder')" title="תזכורת חדשה">
+        <span class="ic" data-i="bell" data-s="20"></span>
+      </div>
+      <div class="hbtn" onclick="go('s-settings')" title="הגדרות">
+        <span class="ic" data-i="settings" data-s="20"></span>
+      </div>
+    </div>
+  </div>
+  <div class="scroll">
+    <div class="stats-row">
+      <div class="stat-chip" onclick="go('s-memories')">
+        <span class="ic" data-i="brain" data-s="18" data-c="#2F88F5" style="background:#EAF4FF;width:32px;height:32px;border-radius:9px;flex-shrink:0"></span>
+        <div>
+          <div class="stat-chip-val" id="memCount">0</div>
+          <div class="stat-chip-lbl">זיכרונות</div>
+        </div>
+      </div>
+      <div class="stat-chip">
+        <span class="ic" data-i="chat" data-s="18" data-c="#7C3AED" style="background:#F3EEFF;width:32px;height:32px;border-radius:9px;flex-shrink:0"></span>
+        <div>
+          <div class="stat-chip-val" id="chatCount">0</div>
+          <div class="stat-chip-lbl">שיחות</div>
+        </div>
+      </div>
+      <div class="stat-chip">
+        <span class="ic" data-i="bell" data-s="18" data-c="#D97000" style="background:#FFF4DB;width:32px;height:32px;border-radius:9px;flex-shrink:0"></span>
+        <div>
+          <div class="stat-chip-val" id="remCount">0</div>
+          <div class="stat-chip-lbl">תזכורות</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ai-cta">
+      <div class="ai-orb avatar-slot" data-av-size="52" onclick="event.stopPropagation();go('s-avatar-edit')" style="cursor:pointer"></div>
+      <div class="ai-cta-text" onclick="go('s-companion')" style="cursor:pointer">
+        <div class="ai-cta-title" id="hubAvatarName">שוחח עם MindGuide</div>
+        <div class="ai-cta-sub">לחץ על האווטאר לעריכה</div>
+      </div>
+      <span class="ic" data-i="chevron-left" data-s="20" data-c="rgba(255,255,255,.7)" onclick="go('s-companion')" style="cursor:pointer"></span>
+    </div>
+
+    <div class="section-label">זיכרונות אחרונים</div>
+    <div id="hubMemories" style="padding:0 20px">
+      <div style="text-align:center;padding:24px 0;color:var(--text-3);font-size:13px">
+        עדיין אין זיכרונות — שוחח עם ה-AI כדי להוסיף
+      </div>
+    </div>
+
+    <div class="section-label" id="remindersSection" style="display:none">תזכורות</div>
+    <div id="hubReminders" style="padding:0 20px"></div>
+
+    <div style="height:16px"></div>
+  </div>
+
+  <button class="voice-fab" id="voiceFab" onclick="toggleVoiceMode()" title="שיחה קולית">
+    <span class="ic" data-i="mic" data-s="24" data-c="#fff"></span>
+  </button>
+  <div class="tabbar">
+    <div class="tab active" onclick="go('s-hub')">
+      <span class="ic" data-i="home" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">בית</span>
+    </div>
+    <div class="tab" onclick="go('s-reminders')">
+      <span class="ic" data-i="bell" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">תזכורות</span>
+    </div>
+    <div class="tab" onclick="go('s-memories')">
+      <span class="ic" data-i="brain" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">זיכרונות</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── COMPANION ── -->
+<div class="screen" id="s-companion">
+  <div class="comp-header">
+    <div class="comp-toprow">
+      <div class="back-btn" onclick="go('s-hub')">
+        <span class="ic" data-i="chevron-right" data-s="20" data-c="#fff"></span>
+      </div>
+      <span class="comp-name" id="compAvatarName">MindGuide</span>
+      <div class="back-btn" onclick="clearChat()">
+        <span class="ic" data-i="edit" data-s="17" data-c="#fff"></span>
+      </div>
+    </div>
+    <div class="comp-orb avatar-slot" data-av-size="80" onclick="go('s-avatar-edit')" style="cursor:pointer"></div>
+    <div class="avatar-name-row">
+      <span id="compAvatarNameLabel">MindGuide</span>
+      <span class="avatar-edit-pen" onclick="go('s-avatar-edit')" title="עריכת אווטאר">✏️</span>
+    </div>
+    <div class="comp-status" id="compStatus">מוכן לעזור ✦</div>
+  </div>
+  <div class="chat-list" id="chatList">
+    <div class="bubble bubble-ai">
+      שלום! אני MindGuide 🧠<br>
+      אני כאן לעזור לך לארגן מחשבות, לזכור דברים ולהתמודד עם ADHD.<br>
+      כתוב לי כל דבר — אשמור, אזכיר ואעזור לך להתקדם.
+      <div class="bubble-time">עכשיו</div>
+    </div>
+    <div class="typing" id="typing">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  </div>
+  <div class="chat-inputbar">
+    <input
+      class="chat-input"
+      id="chatInput"
+      placeholder="כתוב או דבר..."
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+    />
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()">
+      <span class="ic" data-i="send" data-s="18" data-c="#fff"></span>
+    </button>
+  </div>
+  <button class="voice-fab" onclick="toggleVoiceMode()" title="שיחה קולית">
+    <span class="ic" data-i="mic" data-s="24" data-c="#fff"></span>
+  </button>
+  <div class="tabbar">
+    <div class="tab" onclick="go('s-hub')">
+      <span class="ic" data-i="home" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">בית</span>
+    </div>
+    <div class="tab" onclick="go('s-reminders')">
+      <span class="ic" data-i="bell" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">תזכורות</span>
+    </div>
+    <div class="tab" onclick="go('s-memories')">
+      <span class="ic" data-i="brain" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">זיכרונות</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── MEMORIES ── -->
+<div class="screen" id="s-memories">
+  <div class="sbar">
+    <span class="sbar-time" id="clockEl2">9:41</span>
+    <div class="sbar-icons">
+      <div class="sbar-sig"></div>
+      <div class="sbar-batt"></div>
+    </div>
+  </div>
+  <div class="header">
+    <div class="hbtn" onclick="go('s-hub')" style="background:var(--canvas)">
+      <span class="ic" data-i="chevron-right" data-s="20"></span>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:var(--text-1)">הזיכרונות שלי</div>
+    <div class="hbtn" onclick="go('s-settings')" title="הגדרות">
+      <span class="ic" data-i="settings" data-s="20"></span>
+    </div>
+  </div>
+  <div class="scroll" style="padding-top:8px">
+    <div id="memoriesList"></div>
+  </div>
+  <button class="voice-fab" onclick="toggleVoiceMode()" title="שיחה קולית">
+    <span class="ic" data-i="mic" data-s="24" data-c="#fff"></span>
+  </button>
+  <div class="tabbar">
+    <div class="tab" onclick="go('s-hub')">
+      <span class="ic" data-i="home" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">בית</span>
+    </div>
+    <div class="tab" onclick="go('s-reminders')">
+      <span class="ic" data-i="bell" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">תזכורות</span>
+    </div>
+    <div class="tab active" onclick="go('s-memories')">
+      <span class="ic" data-i="brain" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">זיכרונות</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── REMINDERS ── -->
+<div class="screen" id="s-reminders">
+  <div class="sbar">
+    <span class="sbar-time">9:41</span>
+    <div class="sbar-icons"><div class="sbar-sig"></div><div class="sbar-batt"></div></div>
+  </div>
+  <div class="header">
+    <div class="hbtn" onclick="go('s-hub')" style="background:var(--canvas)">
+      <span class="ic" data-i="chevron-right" data-s="20"></span>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:var(--text-1)">התזכורות שלי</div>
+    <div class="hbtn" onclick="go('s-settings')" title="הגדרות">
+      <span class="ic" data-i="settings" data-s="20"></span>
+    </div>
+  </div>
+  <div class="scroll" style="padding-top:8px">
+    <div id="remindersList" style="padding:0 20px"></div>
+    <div style="padding:16px 20px">
+      <button class="btn btn-primary" style="width:100%;border-radius:13px" onclick="showModal('m-reminder')">
+        <span class="ic" data-i="bell" data-s="16" data-c="#fff"></span> תזכורת חדשה
+      </button>
+    </div>
+  </div>
+  <button class="voice-fab" onclick="toggleVoiceMode()" title="שיחה קולית">
+    <span class="ic" data-i="mic" data-s="24" data-c="#fff"></span>
+  </button>
+  <div class="tabbar">
+    <div class="tab" onclick="go('s-hub')">
+      <span class="ic" data-i="home" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">בית</span>
+    </div>
+    <div class="tab active" onclick="go('s-reminders')">
+      <span class="ic" data-i="bell" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">תזכורות</span>
+    </div>
+    <div class="tab" onclick="go('s-memories')">
+      <span class="ic" data-i="brain" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">זיכרונות</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS ── -->
+<div class="screen" id="s-settings">
+  <div class="sbar">
+    <span class="sbar-time">9:41</span>
+    <div class="sbar-icons"><div class="sbar-sig"></div><div class="sbar-batt"></div></div>
+  </div>
+  <div class="header">
+    <div class="hbtn" onclick="go('s-hub')" style="background:var(--canvas)">
+      <span class="ic" data-i="chevron-right" data-s="20"></span>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:var(--text-1)">הגדרות</div>
+    <div style="width:40px"></div>
+  </div>
+  <div class="scroll">
+    <div class="profile-card">
+      <div class="profile-avatar avatar-slot" data-av-size="58" onclick="go('s-avatar-edit')" style="cursor:pointer"></div>
+      <div class="profile-info">
+        <div class="profile-name" id="settingsUserName">אורח</div>
+        <div class="profile-sub" id="settingsAvatarName">MindGuide</div>
+      </div>
+      <div class="api-badge">v1.0.0</div>
+    </div>
+
+    <div class="section-label">סגנון שיחה</div>
+    <div id="styleChips" class="style-chips"></div>
+
+    <div class="section-label">קול ודיבור</div>
+    <div class="card" style="margin:0 20px;overflow:hidden">
+      <div class="toggle-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">קריאה בקול</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">AI קורא כל תשובה אוטומטית</div>
+        </div>
+        <button class="toggle-switch" id="autoSpeakToggle" onclick="toggleAutoSpeak()"></button>
+      </div>
+      <div style="padding:14px 16px 4px">
+        <div style="font-size:12px;font-weight:700;color:var(--text-3);letter-spacing:.4px;margin-bottom:10px">סוג קול</div>
+        <div id="personaChips" class="style-chips" style="padding:0"></div>
+      </div>
+      <div style="padding:10px 16px 14px">
+        <button class="btn btn-ghost" style="width:100%;border-radius:10px;font-size:13px;padding:9px" onclick="speakText('שלום! אני MindGuide, המוח החיצוני שלך. במה אוכל לעזור היום?')">▶ בדוק קול עכשיו</button>
+      </div>
+    </div>
+
+    <div class="section-label">נתונים</div>
+    <div class="card" style="margin:0 20px;padding:0;overflow:hidden">
+      <div class="row-item" onclick="go('s-memories')">
+        <div class="icon-tile" style="background:#EAF4FF">
+          <span class="ic" data-i="brain" data-s="20" data-c="#2F88F5"></span>
+        </div>
+        <div class="row-main">
+          <div class="row-title">זיכרונות שמורים</div>
+          <div class="row-sub" id="settingsMemCount">0 זיכרונות</div>
+        </div>
+        <span class="ic" data-i="chevron-left" data-s="16" data-c="var(--text-3)"></span>
+      </div>
+      <div class="row-item">
+        <div class="icon-tile" style="background:#FFF4DB">
+          <span class="ic" data-i="bell" data-s="20" data-c="#D97000"></span>
+        </div>
+        <div class="row-main">
+          <div class="row-title">תזכורות</div>
+          <div class="row-sub" id="settingsRemCount">0 תזכורות</div>
+        </div>
+        <span class="ic" data-i="chevron-left" data-s="16" data-c="var(--text-3)"></span>
+      </div>
+    </div>
+
+    <div class="section-label">זהות ואווטאר</div>
+    <div class="card" style="margin:0 20px;padding:0;overflow:hidden">
+      <div class="row-item" onclick="go('s-avatar-edit')">
+        <div class="icon-tile" style="background:#EAF4FF">✏️</div>
+        <div class="row-main">
+          <div class="row-title">עיצוב אווטאר</div>
+          <div class="row-sub" id="settingsAvatarSub">שנה מראה, מגדר ושם</div>
+        </div>
+        <span class="ic" data-i="chevron-left" data-s="16" data-c="var(--text-3)"></span>
+      </div>
+      <div class="row-item" onclick="promptUserName()">
+        <div class="icon-tile" style="background:#FFF4DB">👤</div>
+        <div class="row-main">
+          <div class="row-title">השם שלי</div>
+          <div class="row-sub" id="settingsUserNameSub">-</div>
+        </div>
+        <span class="ic" data-i="chevron-left" data-s="16" data-c="var(--text-3)"></span>
+      </div>
+    </div>
+
+    <div class="section-label">אינטגרציות</div>
+    <div class="card" style="margin:0 20px;overflow:hidden">
+      <div class="toggle-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">📧 מייל</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">תכונה תתווסף בקרוב</div>
+        </div>
+        <button class="toggle-switch" id="integEmail" onclick="toggleIntegration('email')"></button>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">📅 יומן</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">תכונה תתווסף בקרוב</div>
+        </div>
+        <button class="toggle-switch" id="integCalendar" onclick="toggleIntegration('calendar')"></button>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">💬 WhatsApp</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">תכונה תתווסף בקרוב</div>
+        </div>
+        <button class="toggle-switch" id="integWhatsapp" onclick="toggleIntegration('whatsapp')"></button>
+      </div>
+    </div>
+
+    <div class="section-label">סיכומים</div>
+    <div class="card" style="margin:0 20px;overflow:hidden">
+      <div class="toggle-row">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">סיכום יומי</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">שעה: <span id="dailyTimeLabel">20:00</span></div>
+        </div>
+        <button class="toggle-switch" id="dailyToggle" onclick="toggleDailySummary()"></button>
+      </div>
+      <div style="padding:6px 16px 12px">
+        <input type="time" id="dailyTimeInput" class="form-input" style="width:100%" onchange="setDailyTime()" value="20:00">
+      </div>
+      <div class="toggle-row" style="border-top:1px solid var(--divider)">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-1)">סיכום שבועי</div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px">יום: <span id="weeklyDayLabel">ראשון</span> · שעה: <span id="weeklyTimeLabel">10:00</span></div>
+        </div>
+        <button class="toggle-switch" id="weeklyToggle" onclick="toggleWeeklySummary()"></button>
+      </div>
+      <div style="padding:6px 16px 12px;display:flex;gap:8px">
+        <select id="weeklyDayInput" class="ae-select" onchange="setWeeklyDay()">
+          <option value="0">ראשון</option><option value="1">שני</option><option value="2">שלישי</option>
+          <option value="3">רביעי</option><option value="4">חמישי</option><option value="5">שישי</option><option value="6">שבת</option>
+        </select>
+        <input type="time" id="weeklyTimeInput" class="form-input" style="flex:1" onchange="setWeeklyTime()" value="10:00">
+      </div>
+    </div>
+
+    <div class="section-label">גרסה</div>
+    <div class="card" style="margin:0 20px;padding:0;overflow:hidden">
+      <div class="row-item">
+        <div class="icon-tile" style="background:#EAF4FF">🏷️</div>
+        <div class="row-main">
+          <div class="row-title">גרסה <span id="appVersionLabel">1.0.0</span></div>
+          <div class="row-sub" id="updateStatusSub">לחץ כדי לבדוק עדכונים</div>
+        </div>
+        <button class="btn btn-ghost" style="font-size:12px;padding:7px 11px" onclick="checkForUpdates()">חפש עדכונים</button>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-ghost" style="width:100%;border-radius:13px" onclick="restartOnboarding()">
+        🚀 הפעל onboarding מחדש
+      </button>
+      <button class="btn btn-danger" style="width:100%;border-radius:13px" onclick="clearMemories()">
+        <span class="ic" data-i="brain" data-s="16" data-c="var(--red)"></span> מחק כל הזיכרונות
+      </button>
+    </div>
+
+    <div style="text-align:center;padding:4px 20px 16px;font-size:11px;color:var(--text-3)">
+      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.0</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── AVATAR EDIT ── -->
+<div class="screen" id="s-avatar-edit">
+  <div class="sbar">
+    <span class="sbar-time">9:41</span>
+    <div class="sbar-icons"><div class="sbar-sig"></div><div class="sbar-batt"></div></div>
+  </div>
+  <div class="header">
+    <div class="hbtn" onclick="go('s-hub')" style="background:var(--canvas)">
+      <span class="ic" data-i="chevron-right" data-s="20"></span>
+    </div>
+    <div style="font-size:19px;font-weight:800;color:var(--text-1)">עיצוב אווטאר</div>
+    <div style="width:40px"></div>
+  </div>
+  <div class="scroll">
+    <!-- Swipe carousel: prev | current | next -->
+    <div class="ae-carousel" id="aeCarousel">
+      <button class="ae-arrow ae-arrow-right" onclick="cycleAvatarSeed(-1)" aria-label="הקודם">‹</button>
+      <div class="ae-preview" id="aePreview"></div>
+      <button class="ae-arrow ae-arrow-left" onclick="cycleAvatarSeed(1)" aria-label="הבא">›</button>
+    </div>
+    <div class="ae-hint">↔️ החלק או לחץ על החצים כדי להחליף מראה</div>
+
+    <div class="ae-section">
+      <div class="ae-label">שם האווטאר</div>
+      <input type="text" class="form-input" id="aeAvatarName" placeholder="MindGuide" onchange="setAvatarName(this.value)">
+    </div>
+
+    <div class="ae-section">
+      <div class="ae-label">מגדר</div>
+      <div class="ae-gender-row">
+        <button class="ae-gender-btn" id="aeGenderMale" onclick="setAvatarGender('male')">👨 זכר</button>
+        <button class="ae-gender-btn" id="aeGenderFemale" onclick="setAvatarGender('female')">👩 נקבה</button>
+      </div>
+    </div>
+
+    <div class="ae-section">
+      <div class="ae-label">צבע רקע</div>
+      <div class="ae-color-row" id="aeColors"></div>
+    </div>
+
+    <div style="padding:16px 20px 90px">
+      <button class="btn btn-primary" style="width:100%;border-radius:13px" onclick="go('s-hub')">שמור וסיים</button>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab" onclick="go('s-hub')">
+      <span class="ic" data-i="home" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">בית</span>
+    </div>
+    <div class="tab" onclick="go('s-reminders')">
+      <span class="ic" data-i="bell" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">תזכורות</span>
+    </div>
+    <div class="tab" onclick="go('s-memories')">
+      <span class="ic" data-i="brain" data-s="24"></span>
+      <div class="tab-dot"></div>
+      <span class="tab-lbl">זיכרונות</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── ONBOARDING ── -->
+<div class="screen" id="s-onboard">
+  <div class="sbar">
+    <span class="sbar-time">9:41</span>
+    <div class="sbar-icons"><div class="sbar-sig"></div><div class="sbar-batt"></div></div>
+  </div>
+  <div class="scroll" style="padding:40px 24px">
+    <!-- Step 1: name -->
+    <div id="onbStep1" class="onb-step">
+      <div style="text-align:center;font-size:56px;margin-bottom:14px">👋</div>
+      <div style="text-align:center;font-size:24px;font-weight:800;color:var(--text-1);margin-bottom:6px">ברוך הבא ל-MindGuide</div>
+      <div style="text-align:center;font-size:14px;color:var(--text-3);margin-bottom:30px">העוזר האישי שלך לADHD — בעברית</div>
+      <div class="ae-label" style="padding:0 4px">איך קוראים לך?</div>
+      <input type="text" class="form-input" id="onbName" placeholder="השם שלך..." style="margin-bottom:20px">
+      <button class="btn btn-primary" style="width:100%;border-radius:13px" onclick="onbNext(2)">המשך ←</button>
+    </div>
+
+    <!-- Step 2: avatar -->
+    <div id="onbStep2" class="onb-step" style="display:none">
+      <div style="text-align:center;font-size:22px;font-weight:800;color:var(--text-1);margin-bottom:18px">בוא נתאים את האווטאר שלך</div>
+      <div class="ae-preview" id="onbPreview" style="width:160px;height:160px"></div>
+      <div style="text-align:center;margin-bottom:14px">
+        <button class="btn btn-ghost" style="border-radius:13px" onclick="go('s-avatar-edit')">🎨 התאם לי אווטאר</button>
+      </div>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" style="flex:1;border-radius:13px" onclick="onbNext(1)">→ חזור</button>
+        <button class="btn btn-primary" style="flex:2;border-radius:13px" onclick="onbNext(3)">המשך ←</button>
+      </div>
+    </div>
+
+    <!-- Step 3: integrations -->
+    <div id="onbStep3" class="onb-step" style="display:none">
+      <div style="text-align:center;font-size:22px;font-weight:800;color:var(--text-1);margin-bottom:10px">לאלו שירותים לחבר?</div>
+      <div style="text-align:center;font-size:13px;color:var(--text-3);margin-bottom:18px">ניתן לשנות בכל עת בהגדרות. (תכונות אלה יתווספו בקרוב)</div>
+      <div class="card" style="overflow:hidden;margin-bottom:18px">
+        <div class="toggle-row">
+          <div><div style="font-size:14px;font-weight:600">📧 מייל</div></div>
+          <button class="toggle-switch" id="onbEmail" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="toggle-row">
+          <div><div style="font-size:14px;font-weight:600">📅 יומן</div></div>
+          <button class="toggle-switch" id="onbCalendar" onclick="this.classList.toggle('on')"></button>
+        </div>
+        <div class="toggle-row">
+          <div><div style="font-size:14px;font-weight:600">💬 WhatsApp</div></div>
+          <button class="toggle-switch" id="onbWhatsapp" onclick="this.classList.toggle('on')"></button>
+        </div>
+      </div>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" style="flex:1;border-radius:13px" onclick="onbNext(2)">→ חזור</button>
+        <button class="btn btn-primary" style="flex:2;border-radius:13px" onclick="finishOnboarding()">🚀 בוא נתחיל</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VOICE MODE OVERLAY ── -->
+<div id="voiceOverlay" style="display:none;position:fixed;inset:0;background:rgba(10,12,32,.92);z-index:2000;flex-direction:column;align-items:center;justify-content:center;color:#fff">
+  <div id="voiceOverlayAvatar" class="avatar-slot" style="width:160px;height:160px;margin-bottom:24px;border:4px solid rgba(255,255,255,.2)"></div>
+  <div id="voiceOverlayStatus" style="font-size:18px;font-weight:700;margin-bottom:8px">מקשיב... 🎙️</div>
+  <div id="voiceOverlayTranscript" style="font-size:14px;color:rgba(255,255,255,.7);min-height:40px;text-align:center;padding:0 30px;max-width:400px"></div>
+  <button onclick="toggleVoiceMode()" style="margin-top:40px;padding:14px 32px;border-radius:24px;border:none;background:#EF4444;color:#fff;font-size:16px;font-weight:700;cursor:pointer">🛑 סיים שיחה</button>
+</div>
+
+<!-- ── MODAL: REMINDER ── -->
+<div class="modal-overlay" id="m-reminder" onclick="closeModal('m-reminder',event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">תזכורת חדשה</div>
+    <div class="form-label">מה לזכור?</div>
+    <input class="form-input" id="r-title" placeholder="למשל: לקחת כדור, לקנות לחם…" />
+    <div class="form-row">
+      <div class="fg">
+        <div class="form-label">תאריך</div>
+        <input class="form-input" id="r-date" type="date" />
+      </div>
+      <div class="fg">
+        <div class="form-label">שעה</div>
+        <input class="form-input" id="r-time" type="time" value="09:00" />
+      </div>
+    </div>
+    <div style="display:flex;gap:9px">
+      <button class="btn btn-ghost" style="flex:1;border-radius:12px" onclick="closeModal('m-reminder')">ביטול</button>
+      <button class="btn btn-primary" style="flex:2;border-radius:12px" onclick="saveReminder()">שמור</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end phone -->
+
+<div class="toast" id="toastEl"></div>
+
+<script>
+/* ══ SVG ICON LIBRARY ══ */
+const IC = {
+  home: `<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-9.5z"/><path d="M9 21V13h6v8"/>`,
+  brain: `<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2z"/>`,
+  robot: `<rect x="3" y="8" width="18" height="12" rx="3"/><circle cx="9" cy="13" r="1.2" fill="currentColor"/><circle cx="15" cy="13" r="1.2" fill="currentColor"/><path d="M9 17h6"/><path d="M12 8V5"/><line x1="8" y1="5" x2="16" y2="5"/>`,
+  settings: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>`,
+  bell: `<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>`,
+  chat: `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
+  'chevron-left': `<polyline points="15 18 9 12 15 6"/>`,
+  'chevron-right': `<polyline points="9 18 15 12 9 6"/>`,
+  send: `<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>`,
+  edit: `<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>`,
+  mic: `<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8.5" y1="22" x2="15.5" y2="22"/>`,
+  logout: `<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>`,
+  x: `<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`,
+  plus: `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`,
+  check: `<polyline points="20 6 9 17 4 12"/>`,
+  trash: `<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`,
+  calendar: `<rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
+  star: `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`,
+  volume: `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>`,
+  'volume-off': `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`,
+};
+function ic(name, size, color) {
+  const p = IC[name] || IC['star'];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color||'currentColor'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
+document.addEventListener('DOMContentLoaded', renderIcons);
+function renderIcons() {
+  document.querySelectorAll('[data-i]').forEach(el => {
+    el.innerHTML = ic(el.getAttribute('data-i'), el.getAttribute('data-s')||'20', el.getAttribute('data-c')||'currentColor');
+  });
+}
+
+/* ══ VOICE PERSONAS ══ */
+// Each persona: pick a matching system voice by name-hint, then apply pitch+rate on top.
+// Windows voices: David/Mark/George=male · Zira/Hazel/Linda/Susan=female
+// macOS voices: Alex/Daniel/Tom=male · Samantha/Victoria/Karen=female
+// 4 personas: man, woman, boy, girl. Voice field maps to Google Cloud TTS (he-IL-Wavenet-*).
+// Browser-TTS fallback uses pitch/rate since Windows Hebrew ignores pitch (but Google Cloud honors it).
+const PERSONAS = [
+  { id:'man',   label:'👨 גבר',   gender:'male',   voice:'he-IL-Wavenet-D', pitch:1.00, rate:0.98, volume:1.0 },
+  { id:'woman', label:'👩 אישה', gender:'female', voice:'he-IL-Wavenet-A', pitch:1.00, rate:1.00, volume:1.0 },
+  { id:'boy',   label:'👦 ילד',   gender:'male',   voice:'he-IL-Wavenet-B', pitch:4.00, rate:1.18, volume:0.95 },
+  { id:'girl',  label:'👧 ילדה', gender:'female', voice:'he-IL-Wavenet-C', pitch:4.00, rate:1.20, volume:0.95 },
+];
+
+// Hebrew (Windows): asaf=male, hila=female  |  English: david/mark=male, zira=female  |  macOS: alex/daniel=male, samantha=female
+const MALE_HINTS   = ['asaf','david','mark','thomas','george','daniel','paul','richard','james','peter','alex','tom','fred','oliver','lee'];
+const FEMALE_HINTS = ['hila','zira','hazel','linda','susan','kate','victoria','samantha','karen','moira','tessa','fiona','vicki','allison','ava','nicky'];
+
+let selPersonaId = localStorage.getItem('mg_persona') || 'man';
+// Migration: map removed persona IDs to closest remaining ones
+if (!['man','woman','boy','girl'].includes(selPersonaId)) {
+  const legacyMap = { bass:'man', deep:'man', robot:'man', elder:'man', soprano:'woman', fast:'woman' };
+  selPersonaId = legacyMap[selPersonaId] || 'man';
+  localStorage.setItem('mg_persona', selPersonaId);
+}
+
+function pickVoice(gender, lang) {
+  if (!ttsVoices.length) return null;
+  const langPrefix = (lang || 'he-IL').split('-')[0];
+  const hints = gender === 'female' ? FEMALE_HINTS : MALE_HINTS;
+  const opposite = gender === 'female' ? MALE_HINTS : FEMALE_HINTS;
+  // 1. Prefer voice in matching language AND matching gender
+  const langVoices = ttsVoices.filter(v => v.lang.toLowerCase().startsWith(langPrefix));
+  const found = langVoices.find(v => hints.some(h => v.name.toLowerCase().includes(h)));
+  if (found) return found;
+  // 2. Any voice in the language
+  if (langVoices.length) return langVoices[0];
+  // 3. Gender match in any language
+  const anyGender = ttsVoices.find(v => hints.some(h => v.name.toLowerCase().includes(h)));
+  if (anyGender) return anyGender;
+  // 4. Opposite gender as final fallback
+  return ttsVoices.find(v => opposite.some(h => v.name.toLowerCase().includes(h))) || ttsVoices[0];
+}
+
+function setPersona(id) {
+  selPersonaId = id;
+  localStorage.setItem('mg_persona', id);
+  renderPersonaChips();
+  const p = PERSONAS.find(x => x.id === id);
+  speakText('שלום! זה הקול שלי. אני כאן לעזור.');
+  toast(p?.label || id);
+}
+
+function renderPersonaChips() {
+  const el = document.getElementById('personaChips');
+  if (!el) return;
+  el.innerHTML = PERSONAS.map(p =>
+    `<button class="style-chip${p.id===selPersonaId?' active':''}" onclick="setPersona('${p.id}')">${p.label}</button>`
+  ).join('');
+}
+
+/* ══ SPEAKING STYLES ══ */
+const STYLES = [
+  { id:'regular',    label:'🗣️ רגיל',    prompt:'' },
+  { id:'adhd',       label:'🧠 ADHD',    prompt:'דבר בצורה ברורה, קצרה וממוקדת. פרק משימות לשלבים קטנים. עודד את המשתמש. הזכר שלבים בעדינות. תמיד תשמור על טון חם ותומך.' },
+  { id:'formal',     label:'💼 רשמי',    prompt:'דבר בסגנון מקצועי ורשמי לחלוטין. משפטים ברורים ומסודרים, ללא סלנג, ללא אמוג\'י. כמו יועץ עסקי מנוסה.' },
+  { id:'funny',      label:'😄 מצחיק',   prompt:'דבר בסגנון הומוריסטי ושמח. הוסף בדיחות קצרות ומשחקי מילים בעברית. הפוך כל משימה לכיפית ומגניבה, אבל אל תשכח לעזור.' },
+  { id:'cynical',    label:'😏 ציני',    prompt:'דבר בסגנון ציני יבש עם הומור שחור עדין. ישיר, ללא מליצות, עם הערות סרקסטיות שיחיות — אבל תמיד עוזר בסוף. כמו חבר ישראלי שאוהב להתלונן.' },
+  { id:'military',   label:'🎖️ צבאי',   prompt:'דבר בסגנון צבאי קצר ופקודתי. משפט אחד לתשובה. רק עובדות ופעולות. אין רגש, אין חמלה, רק ביצוע משימות.' },
+  { id:'therapist',  label:'🛋️ טיפולי', prompt:'דבר כמו מטפל נפשי חכם ואמפתי. שאל שאלות מחשבתיות על הרגשות, עזור למשתמש להבין את עצמו לעומק, אמת את חוויותיו.' },
+  { id:'friend',     label:'🤙 חברי',    prompt:'דבר כמו חבר ישראלי צעיר. סלנג, קצר, "אחי", "סבבה", "ממש", "אחלה". כמו הודעת WhatsApp. מותר לקצר מילים.' },
+];
+let currentStyle = localStorage.getItem('mg_style') || 'regular';
+// Migration: old 'default' → 'adhd' (preserves prior meaning of the default)
+if (currentStyle === 'default') { currentStyle = 'adhd'; localStorage.setItem('mg_style','adhd'); }
+if (!STYLES.find(s => s.id === currentStyle)) { currentStyle = 'regular'; localStorage.setItem('mg_style','regular'); }
+let autoSpeak = localStorage.getItem('mg_auto_speak') === 'true';
+
+function getSystemPrompt() {
+  // Use dynamic system prompt (includes avatar/user identity + reminder JSON protocol)
+  if (typeof getDynamicSystemPrompt === 'function') return getDynamicSystemPrompt();
+  const style = STYLES.find(s => s.id === currentStyle) || STYLES[0];
+  return SYSTEM_PROMPT + (style.prompt ? '\n\nסגנון דיבור נוכחי:\n' + style.prompt : '');
+}
+
+function setStyle(id) {
+  currentStyle = id;
+  localStorage.setItem('mg_style', id);
+  renderStyleChips();
+  const s = STYLES.find(x => x.id === id);
+  toast('סגנון: ' + (s?.label || id));
+}
+
+function renderStyleChips() {
+  const el = document.getElementById('styleChips');
+  if (!el) return;
+  el.innerHTML = STYLES.map(s =>
+    `<button class="style-chip${s.id===currentStyle?' active':''}" onclick="setStyle('${s.id}')">${s.label}</button>`
+  ).join('');
+}
+
+/* ══ TTS ══ */
+let ttsVoices = [];
+let currentUtterance = null;
+
+function loadVoices() {
+  ttsVoices = speechSynthesis.getVoices();
+  renderPersonaChips();
+}
+if (window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = loadVoices;
+  setTimeout(loadVoices, 300);
+}
+
+// Auto-detect language by unicode ranges in text (Hebrew/Arabic/Cyrillic fallback to he-IL)
+function detectLang(text) {
+  if (/[\u0590-\u05FF]/.test(text)) return 'he-IL';
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU';
+  if (/[a-zA-Z]/.test(text)) return 'en-US';
+  return 'he-IL';
+}
+
+// Strip emojis, pictographs, and symbols so TTS never "reads" them aloud.
+function stripEmojis(text) {
+  if (!text) return '';
+  return text
+    // Unicode emoji + pictograph ranges (covers faces, symbols, flags, dingbats, etc.)
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')     // misc symbols & dingbats (✦ ✅ ⚠ ⏰ etc.)
+    .replace(/[\u{2300}-\u{23FF}]/gu, '')     // misc technical
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')     // arrows, stars
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')   // flag letters
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')     // variation selectors
+    .replace(/\u200D/g, '')                    // ZWJ
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function _buildUtt(text) {
+  let clean = text.replace(/\*\*(.*?)\*\*/g,'$1').replace(/\*(.*?)\*/g,'$1')
+    .replace(/<[^>]+>/g,'').replace(/[^\S\n]+/g,' ').trim();
+  clean = stripEmojis(clean);
+  if (!clean) return null;
+  const utt     = new SpeechSynthesisUtterance(clean);
+  const persona = PERSONAS.find(p => p.id === selPersonaId) || PERSONAS[0];
+
+  // Auto-pick browser voice by detected language + persona gender
+  const lang = detectLang(clean);
+  const v = pickVoice(persona.gender, lang);
+  if (v) { utt.voice = v; utt.lang = v.lang; }
+  else   { utt.lang = lang; }
+
+  utt.pitch  = persona.pitch;
+  utt.rate   = persona.rate;
+  utt.volume = persona.volume ?? 1.0;
+  return utt;
+}
+
+let _currentAudio = null;
+async function speakText(text) {
+  if (_currentAudio) { try { _currentAudio.pause(); } catch(e){} _currentAudio = null; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (!text) return;
+  const persona = PERSONAS.find(p => p.id === selPersonaId) || PERSONAS[0];
+  try {
+    _currentAudio = await speakGoogle(text, persona);
+    return;
+  } catch(e) {
+    // fallback to browser TTS
+  }
+  if (!window.speechSynthesis) return;
+  const utt = _buildUtt(text);
+  if (utt) speechSynthesis.speak(utt);
+}
+
+async function toggleSpeakBtn(btn, text) {
+  // Stop if currently speaking
+  if (_currentAudio && !_currentAudio.paused) { try{_currentAudio.pause();}catch(e){} _currentAudio = null; btn.classList.remove('speaking'); return; }
+  if (window.speechSynthesis && speechSynthesis.speaking) { speechSynthesis.cancel(); btn.classList.remove('speaking'); return; }
+  btn.classList.add('speaking');
+  const persona = PERSONAS.find(p => p.id === selPersonaId) || PERSONAS[0];
+  try {
+    const audio = await speakGoogle(text, persona);
+    _currentAudio = audio;
+    audio.onended = () => btn.classList.remove('speaking');
+    return;
+  } catch(e) {}
+  const utt = _buildUtt(text);
+  if (!utt) { btn.classList.remove('speaking'); return; }
+  utt.onend = () => btn.classList.remove('speaking');
+  speechSynthesis.speak(utt);
+}
+
+function toggleAutoSpeak() {
+  autoSpeak = !autoSpeak;
+  localStorage.setItem('mg_auto_speak', String(autoSpeak));
+  const btn = document.getElementById('autoSpeakToggle');
+  if (btn) btn.classList.toggle('on', autoSpeak);
+  toast(autoSpeak ? '🔊 קריאה בקול פעילה' : '🔇 קריאה בקול כבויה');
+}
+
+/* ══ STT ══ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isRecording  = false;
+
+function initSTT() {
+  if (!SR) return;
+  recognition = new SR();
+  recognition.lang = 'he-IL';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    document.getElementById('micBtn')?.classList.add('recording');
+    document.getElementById('compStatus').textContent = 'מקשיב... 🎙️';
+  };
+  recognition.onresult = (e) => {
+    const t = Array.from(e.results).map(r=>r[0].transcript).join('');
+    document.getElementById('chatInput').value = t;
+    if (e.results[e.results.length-1].isFinal) {
+      stopRecording();
+      setTimeout(() => sendMsg(), 150);
+    }
+  };
+  recognition.onerror = (e) => {
+    stopRecording();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'permission-denied') {
+      _micPermissionDenied = true;
+      toast('🎙️ אין הרשאה למיקרופון. לחץ על המנעול בכתובת הדפדפן כדי לאפשר.');
+      return;
+    }
+    if (e.error !== 'aborted' && e.error !== 'no-speech') toast('שגיאת מיקרופון: ' + e.error);
+  };
+  recognition.onend = () => stopRecording();
+}
+
+function stopRecording() {
+  isRecording = false;
+  document.getElementById('micBtn')?.classList.remove('recording');
+  renderIcons(); // re-render mic icon in case it was replaced
+  if (document.getElementById('compStatus').textContent.includes('מקשיב'))
+    document.getElementById('compStatus').textContent = 'מוכן לעזור ✦';
+}
+
+function toggleMic() {
+  if (!SR) { toast('מיקרופון לא נתמך — נסה Chrome או Edge'); return; }
+  if (typeof _micPermissionDenied !== 'undefined' && _micPermissionDenied) {
+    toast('🎙️ הרשאת מיקרופון חסומה. לחץ על סמל המנעול בכתובת כדי לאפשר.');
+    return;
+  }
+  if (!recognition) initSTT();
+  if (isRecording) { recognition.stop(); return; }
+  // Make sure we're on the companion screen
+  if (!document.getElementById('s-companion').classList.contains('active')) go('s-companion');
+  try { recognition.start(); } catch(e) { /* already started */ }
+}
+
+// Continuous voice conversation mode
+let voiceModeActive = false;
+let _voiceRecognition = null;
+let _voiceErrorCount = 0;
+let _micPermissionDenied = false;
+
+function toggleVoiceMode() {
+  if (voiceModeActive) {
+    stopVoiceConversation();
+    return;
+  }
+  // If permission was previously denied, don't re-prompt
+  if (_micPermissionDenied) {
+    toast('⚠️ הרשאת מיקרופון נחסמה. לחץ על סמל המנעול בכתובת הדפדפן כדי לאפשר.');
+    return;
+  }
+  voiceModeActive = true;
+  document.querySelectorAll('.voice-fab').forEach(b => b.classList.toggle('active', true));
+  startVoiceConversation();
+}
+
+function startVoiceConversation() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('הדפדפן לא תומך בזיהוי דיבור'); stopVoiceConversation(); return; }
+  voiceOverlayShow(true);
+  voiceOverlayStatus('מקשיב... 🎙️');
+  voiceOverlayTranscript('');
+  _voiceLoopActive = true;
+  _voiceErrorCount = 0;
+  _voiceLoopTick();
+}
+
+function _voiceLoopTick() {
+  if (!_voiceLoopActive) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} }
+  const rec = new SR();
+  _voiceRecognition = rec;
+  rec.lang = 'he-IL';
+  rec.continuous = false;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  let finalText = '';
+  let lastInterim = '';
+  rec.onstart = () => { _voiceErrorCount = 0; voiceOverlayStatus('מקשיב... 🎙️'); };
+  rec.onresult = (e) => {
+    const t = Array.from(e.results).map(r=>r[0].transcript).join('');
+    voiceOverlayTranscript(t);
+    lastInterim = t;
+    if (e.results[e.results.length-1].isFinal) finalText = t;
+  };
+  rec.onerror = (e) => {
+    // Fatal errors: never retry
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'permission-denied') {
+      _micPermissionDenied = true;
+      toast('🎙️ אין הרשאה למיקרופון');
+      stopVoiceConversation();
+      return;
+    }
+    if (e.error === 'audio-capture') {
+      toast('🎙️ לא נמצא מיקרופון');
+      stopVoiceConversation();
+      return;
+    }
+    // Benign errors: allow a few retries then give up
+    _voiceErrorCount++;
+    if (_voiceErrorCount > 3) {
+      toast('⚠️ שיחה קולית הופסקה (יותר מדי שגיאות)');
+      stopVoiceConversation();
+      return;
+    }
+    if (_voiceLoopActive) setTimeout(_voiceLoopTick, 800);
+  };
+  rec.onend = async () => {
+    if (!_voiceLoopActive) return;
+    // On Android Chrome isFinal often never fires; fall back to the latest
+    // interim transcript once onend triggers (recognizer has stopped listening).
+    const txt = ((finalText || lastInterim) || '').trim();
+    if (!txt) { setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 400); return; }
+    voiceOverlayStatus('חושב... 🤔');
+    try {
+      const { text } = await callGemini(txt);
+      if (!_voiceLoopActive) return;
+      voiceOverlayStatus('מדבר... 🔊');
+      voiceOverlayTranscript((text||'').substring(0, 200));
+      await speakText(text);
+      setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 2800);
+    } catch(e) {
+      _voiceErrorCount++;
+      if (_voiceErrorCount > 3) { stopVoiceConversation(); return; }
+      voiceOverlayStatus('שגיאה — מנסה שוב');
+      setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 2000);
+    }
+  };
+  try { rec.start(); } catch(e) {
+    _voiceErrorCount++;
+    if (_voiceErrorCount > 3) { stopVoiceConversation(); return; }
+    setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 800);
+  }
+}
+
+function stopVoiceConversation() {
+  _voiceLoopActive = false;
+  voiceModeActive = false;
+  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (typeof _currentAudio !== 'undefined' && _currentAudio) { try{_currentAudio.pause();}catch(e){} _currentAudio = null; }
+  document.querySelectorAll('.voice-fab').forEach(b => b.classList.toggle('active', false));
+  voiceOverlayShow(false);
+}
+
+/* ══ STATE ══ */
+let apiKey = localStorage.getItem('mg_api_key') || 'AIzaSyB71AFwM7BX5y_15-n4Xk1WwA5sv0WanhU';
+if (apiKey && !localStorage.getItem('mg_api_key')) localStorage.setItem('mg_api_key', apiKey);
+let memories = JSON.parse(localStorage.getItem('mg_memories') || '[]');
+let reminders = JSON.parse(localStorage.getItem('mg_reminders') || '[]');
+let chatHistory = []; // [{role:'user'|'model', parts:[{text}]}]
+let totalChats = parseInt(localStorage.getItem('mg_chat_count') || '0');
+
+const SYSTEM_PROMPT = `אתה MindGuide — עוזר AI חכם ואמפתי שנבנה במיוחד עבור אנשים עם ADHD.
+תפקידך לשמש כ"מוח חיצוני" — לעזור למשתמש לשמור מידע, לזכור דברים, לארגן מחשבות ולבצע משימות.
+
+כללי תקשורת:
+• ענה תמיד בעברית (אלא אם המשתמש כותב בשפה אחרת)
+• תשובות קצרות ולעניין — עד 3-4 משפטים בדרך כלל
+• היה חם, עידודי, ולא שיפוטי לעולם
+• השתמש באמוג'י במידה — חם אבל לא מגזים
+• חגוג הצלחות קטנות!
+
+כשהמשתמש מזכיר משהו לשמור (זיכרון):
+• אמור בסוף התשובה: "✅ שמרתי כזיכרון"
+• כשאתה מזהה תאריך/שעה — הצע להוסיף תזכורת
+
+כשהמשתמש מבקש תזכורת ("תזכיר לי", "remind me"):
+• אשר בחום: "⏰ נוצרה תזכורת ל..."
+• עזור לפרק לצעדים קטנים אם המשימה גדולה
+
+המשתמשים שלך מתקשים עם:
+• ניהול זמן וזיכרון עבודה
+• התחלת משימות (task initiation)
+• ריגולציה רגשית
+• עיבוד מידע מהיר
+
+היה אסטרטג, לא רק מאזין. הצע פעולות ספציפיות.`;
+
+/* ══ VERSION ══ */
+const APP_VERSION = '1.0.0';
+// TODO: Full auto-update requires hosting. For now this is a placeholder check.
+const VERSION_CHECK_URL = ''; // e.g. 'https://raw.githubusercontent.com/user/repo/main/version.txt'
+
+async function checkForUpdates() {
+  const sub = document.getElementById('updateStatusSub');
+  if (sub) sub.textContent = 'בודק...';
+  if (!VERSION_CHECK_URL) {
+    if (sub) sub.textContent = 'הגרסה עדכנית ✓';
+    toast('הגרסה עדכנית');
+    return;
+  }
+  try {
+    const res = await fetch(VERSION_CHECK_URL);
+    const latest = (await res.text()).trim();
+    if (latest && latest !== APP_VERSION) {
+      if (sub) sub.textContent = `גרסה חדשה: ${latest}`;
+      if (confirm(`גרסה חדשה ${latest} זמינה. לפתוח דף הורדה?`)) {
+        window.open(VERSION_CHECK_URL, '_blank');
+      }
+    } else {
+      if (sub) sub.textContent = 'הגרסה עדכנית ✓';
+    }
+  } catch(e) {
+    if (sub) sub.textContent = 'לא הצליח לבדוק';
+  }
+}
+
+/* ══ TTS API KEY ══ */
+// User must replace with their Google Cloud TTS API key for Hebrew WaveNet.
+// If empty or fails, the app falls back to browser SpeechSynthesis automatically.
+const GCP_TTS_API_KEY = 'AIzaSyCtXjbbKD9SaWjL2Sxumc1HF77efyHACqg';
+
+/* ══ AVATAR ══ */
+const AVATAR_COLORS = ['b6e3f4','c0aede','d1d4f9','ffd5dc','ffdfbf','c1e1c1','fcd5ce','a3c4bc','f4978e','fde2a7'];
+const DEFAULT_AVATAR = {
+  style: 'adventurer',
+  seed: 'MindGuide',
+  backgroundColor: 'b6e3f4',
+  gender: 'male'
+};
+let avatarCfg = (() => {
+  try { return Object.assign({}, DEFAULT_AVATAR, JSON.parse(localStorage.getItem('mg_avatar') || '{}')); }
+  catch { return {...DEFAULT_AVATAR}; }
+})();
+let avatarName = localStorage.getItem('mg_avatar_name') || 'MindGuide';
+let userName = localStorage.getItem('mg_user_name') || '';
+let userNickname = localStorage.getItem('mg_user_nickname') || '';
+
+function buildAvatarUrl(cfg, sizePx) {
+  const c = cfg || avatarCfg;
+  const size = sizePx || 128;
+  const params = new URLSearchParams({
+    seed: c.seed || 'MindGuide',
+    backgroundColor: c.backgroundColor || 'b6e3f4',
+    size: String(size)
+  });
+  return `https://api.dicebear.com/9.x/${c.style || 'adventurer'}/svg?${params.toString()}`;
+}
+
+function renderAvatar() {
+  document.querySelectorAll('.avatar-slot').forEach(el => {
+    const sz = parseInt(el.getAttribute('data-av-size') || '64');
+    el.innerHTML = `<img src="${buildAvatarUrl(avatarCfg, sz*2)}" alt="avatar">`;
+  });
+  const hn = document.getElementById('hubAvatarName');
+  if (hn) hn.textContent = 'שוחח עם ' + avatarName;
+  const cn = document.getElementById('compAvatarName');
+  if (cn) cn.textContent = avatarName;
+  const cnl = document.getElementById('compAvatarNameLabel');
+  if (cnl) cnl.textContent = avatarName;
+  const san = document.getElementById('settingsAvatarName');
+  if (san) san.textContent = avatarName;
+  const sasub = document.getElementById('settingsAvatarSub');
+  if (sasub) sasub.textContent = `${avatarName} · ${avatarCfg.gender === 'female' ? 'נקבה' : 'זכר'}`;
+  const sun = document.getElementById('settingsUserName');
+  if (sun) sun.textContent = (userNickname || userName) || 'אורח';
+  const suns = document.getElementById('settingsUserNameSub');
+  if (suns) suns.textContent = userNickname ? `${userName || ''} (${userNickname})` : (userName || '—');
+}
+
+function saveAvatarCfg() {
+  localStorage.setItem('mg_avatar', JSON.stringify(avatarCfg));
+  renderAvatar();
+  renderAvatarEditScreen();
+}
+
+function setAvatarField(field, val) {
+  avatarCfg[field] = val;
+  saveAvatarCfg();
+}
+
+function setAvatarGender(g) {
+  avatarCfg.gender = g;
+  // Reset seed to first of the new gender's pool so preview reflects new gender
+  const pool = g === 'female' ? SEED_POOL_FEMALE : SEED_POOL_MALE;
+  avatarCfg.seed = pool[0];
+  // Auto-sync voice persona based on gender
+  const targetPersona = g === 'female' ? 'woman' : 'man';
+  selPersonaId = targetPersona;
+  localStorage.setItem('mg_persona', targetPersona);
+  saveAvatarCfg();
+  renderPersonaChips();
+  toast(g === 'female' ? 'מגדר: נקבה (קול אישה)' : 'מגדר: זכר (קול גבר)');
+}
+
+function setAvatarName(name) {
+  avatarName = (name || '').trim() || 'MindGuide';
+  localStorage.setItem('mg_avatar_name', avatarName);
+  renderAvatar();
+}
+
+/* Gender-filtered seed pools. DiceBear uses seed → deterministic avatar,
+   so these curated seeds produce avatars that look masculine / feminine for
+   most styles (especially adventurer, avataaars, personas, notionists). */
+const SEED_POOL_MALE = [
+  'Aidan','Brian','Caleb','Daniel','Ethan','Felix','George','Henry','Isaac',
+  'Jacob','Kevin','Liam','Michael','Noah','Oscar','Peter','Quincy','Ryan',
+  'Samuel','Thomas','Victor','William','Xavier','Zachary','Adam','Alex',
+  'Ben','Chris','David','Eli','Frank','Gabriel','Harry','Jack','Leo','Max',
+  'Nathan','Owen','Paul','Rick','Sean','Tom','Uri','Vince','Wes','Yosef'
+];
+const SEED_POOL_FEMALE = [
+  'Ava','Bella','Chloe','Daisy','Emma','Fiona','Grace','Hannah','Isla',
+  'Julia','Kate','Lily','Mia','Nora','Olivia','Penny','Quinn','Rose',
+  'Sophia','Tara','Uma','Violet','Willow','Yara','Zoe','Alice','Beth',
+  'Clara','Diana','Elena','Faye','Gina','Hazel','Ivy','Jane','Kira',
+  'Luna','Maya','Nina','Piper','Ruby','Sara','Tess','Vera','Yael','Noa'
+];
+
+function _currentSeedPool() {
+  return avatarCfg.gender === 'female' ? SEED_POOL_FEMALE : SEED_POOL_MALE;
+}
+
+function _currentSeedIndex() {
+  const pool = _currentSeedPool();
+  const i = pool.indexOf(avatarCfg.seed);
+  return i >= 0 ? i : 0;
+}
+
+function cycleAvatarSeed(direction) {
+  const pool = _currentSeedPool();
+  const cur = _currentSeedIndex();
+  const next = ((cur + direction) % pool.length + pool.length) % pool.length;
+  avatarCfg.seed = pool[next];
+
+  // Animate swipe
+  const prev = document.getElementById('aePreview');
+  if (prev) {
+    const outCls = direction > 0 ? 'swipe-out-right' : 'swipe-out-left';
+    prev.classList.add(outCls);
+    setTimeout(() => {
+      prev.classList.remove(outCls);
+      saveAvatarCfg();
+    }, 170);
+  } else {
+    saveAvatarCfg();
+  }
+}
+
+function _ensureSeedInPool() {
+  // If gender changed and current seed is not in pool, jump to first seed of pool
+  const pool = _currentSeedPool();
+  if (!pool.includes(avatarCfg.seed)) {
+    avatarCfg.seed = pool[0];
+  }
+}
+
+function renderAvatarEditScreen() {
+  _ensureSeedInPool();
+  const prev = document.getElementById('aePreview');
+  if (prev) prev.innerHTML = `<img src="${buildAvatarUrl(avatarCfg, 280)}" alt="preview">`;
+  const prev2 = document.getElementById('onbPreview');
+  if (prev2) prev2.innerHTML = `<img src="${buildAvatarUrl(avatarCfg, 320)}" alt="preview">`;
+  const sel = document.getElementById('aeStyle');
+  if (sel) sel.value = avatarCfg.style;
+  const nameEl = document.getElementById('aeAvatarName');
+  if (nameEl) nameEl.value = avatarName;
+  const male = document.getElementById('aeGenderMale');
+  const female = document.getElementById('aeGenderFemale');
+  if (male && female) {
+    male.classList.toggle('active', avatarCfg.gender === 'male');
+    female.classList.toggle('active', avatarCfg.gender === 'female');
+  }
+  const colors = document.getElementById('aeColors');
+  if (colors) {
+    colors.innerHTML = AVATAR_COLORS.map(c =>
+      `<div class="ae-color${c===avatarCfg.backgroundColor?' active':''}" style="background:#${c}" onclick="setAvatarField('backgroundColor','${c}')"></div>`
+    ).join('');
+  }
+  _attachCarouselSwipe();
+}
+
+/* Touch-swipe on the carousel preview */
+let _aeSwipeBound = false;
+function _attachCarouselSwipe() {
+  if (_aeSwipeBound) return;
+  const car = document.getElementById('aeCarousel');
+  if (!car) return;
+  let startX = 0, dx = 0, tracking = false;
+  car.addEventListener('touchstart', (e) => {
+    if (!e.touches[0]) return;
+    startX = e.touches[0].clientX; dx = 0; tracking = true;
+  }, { passive: true });
+  car.addEventListener('touchmove', (e) => {
+    if (!tracking || !e.touches[0]) return;
+    dx = e.touches[0].clientX - startX;
+  }, { passive: true });
+  car.addEventListener('touchend', () => {
+    if (!tracking) return;
+    tracking = false;
+    if (Math.abs(dx) > 40) {
+      // In RTL, swipe right (positive dx) = previous; left (negative dx) = next
+      cycleAvatarSeed(dx > 0 ? -1 : 1);
+    }
+  });
+  _aeSwipeBound = true;
+}
+
+/* ══ USER NAME ══ */
+function promptUserName() {
+  const cur = userName || '';
+  const n = prompt('מה השם שלך?', cur);
+  if (n === null) return;
+  userName = n.trim();
+  localStorage.setItem('mg_user_name', userName);
+  renderAvatar();
+  updateGreeting();
+  toast('השם נשמר');
+}
+
+function detectNicknameChange(userMessage) {
+  const m = userMessage.match(/(?:קרא|תקרא)\s+לי\s+([\u0590-\u05FF\w]{1,20})/);
+  if (m && m[1]) {
+    userNickname = m[1].trim();
+    localStorage.setItem('mg_user_nickname', userNickname);
+    renderAvatar();
+    toast('מעכשיו אקרא לך ' + userNickname);
+    return true;
+  }
+  return false;
+}
+
+/* ══ INTEGRATIONS ══ */
+let integrations = (() => {
+  try { return Object.assign({email:false, calendar:false, whatsapp:false}, JSON.parse(localStorage.getItem('mg_integrations') || '{}')); }
+  catch { return {email:false, calendar:false, whatsapp:false}; }
+})();
+
+function toggleIntegration(key) {
+  integrations[key] = !integrations[key];
+  localStorage.setItem('mg_integrations', JSON.stringify(integrations));
+  updateIntegrationsUI();
+  toast((integrations[key] ? 'הופעל' : 'כובה') + ' · ' + key + ' (בקרוב)');
+}
+
+function updateIntegrationsUI() {
+  ['email','calendar','whatsapp'].forEach(k => {
+    const id = 'integ' + k.charAt(0).toUpperCase() + k.slice(1);
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('on', !!integrations[k]);
+  });
+}
+
+/* ══ ONBOARDING ══ */
+function onbNext(step) {
+  if (step === 2) {
+    const n = document.getElementById('onbName').value.trim();
+    if (n) { userName = n; localStorage.setItem('mg_user_name', userName); }
+  }
+  document.querySelectorAll('.onb-step').forEach(el => el.style.display = 'none');
+  document.getElementById('onbStep' + step).style.display = 'block';
+  renderAvatarEditScreen();
+}
+
+function finishOnboarding() {
+  integrations.email = document.getElementById('onbEmail').classList.contains('on');
+  integrations.calendar = document.getElementById('onbCalendar').classList.contains('on');
+  integrations.whatsapp = document.getElementById('onbWhatsapp').classList.contains('on');
+  localStorage.setItem('mg_integrations', JSON.stringify(integrations));
+  localStorage.setItem('mg_onboarded', 'true');
+  requestNotifPermission();
+  go('s-hub');
+  renderAvatar();
+  updateGreeting();
+  toast('שלום ' + (userName || '') + '!');
+}
+
+function restartOnboarding() {
+  if (!confirm('להפעיל את אשף ההתחלה מחדש?')) return;
+  localStorage.removeItem('mg_onboarded');
+  go('s-onboard');
+  onbNext(1);
+}
+
+/* ══ NOTIFICATIONS ══ */
+function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+const scheduledTimers = {};
+function scheduleReminderNotification(reminder) {
+  if (!('Notification' in window)) return;
+  if (!reminder.date || !reminder.time) return;
+  const ts = new Date(reminder.date + 'T' + reminder.time).getTime();
+  const delay = ts - Date.now();
+  if (delay <= 0 || delay > 24*60*60*1000*30) return; // max 30 days
+  if (scheduledTimers[reminder.id]) clearTimeout(scheduledTimers[reminder.id]);
+  scheduledTimers[reminder.id] = setTimeout(() => {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification('⏰ ' + (reminder.title || 'תזכורת'), {
+          body: reminder.details || 'הגיע הזמן!',
+          icon: buildAvatarUrl(avatarCfg, 128)
+        });
+      } catch(e) {}
+    }
+    toast('⏰ תזכורת: ' + reminder.title);
+    speakText('תזכורת! ' + (reminder.title || ''));
+  }, delay);
+}
+
+function scheduleAllReminders() {
+  if (!Array.isArray(reminders)) return;
+  reminders.forEach(r => scheduleReminderNotification(r));
+}
+
+/* ══ SUMMARIES ══ */
+let summaryPrefs = (() => {
+  try { return Object.assign({dailyEnabled:false, dailyTime:'20:00', weeklyEnabled:false, weeklyDay:0, weeklyTime:'10:00'}, JSON.parse(localStorage.getItem('mg_summary_prefs') || '{}')); }
+  catch { return {dailyEnabled:false, dailyTime:'20:00', weeklyEnabled:false, weeklyDay:0, weeklyTime:'10:00'}; }
+})();
+const DAY_NAMES = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+
+function saveSummaryPrefs() { localStorage.setItem('mg_summary_prefs', JSON.stringify(summaryPrefs)); updateSummariesUI(); }
+function updateSummariesUI() {
+  const dt = document.getElementById('dailyToggle'); if (dt) dt.classList.toggle('on', summaryPrefs.dailyEnabled);
+  const wt = document.getElementById('weeklyToggle'); if (wt) wt.classList.toggle('on', summaryPrefs.weeklyEnabled);
+  const dtl = document.getElementById('dailyTimeLabel'); if (dtl) dtl.textContent = summaryPrefs.dailyTime;
+  const dti = document.getElementById('dailyTimeInput'); if (dti) dti.value = summaryPrefs.dailyTime;
+  const wtl = document.getElementById('weeklyTimeLabel'); if (wtl) wtl.textContent = summaryPrefs.weeklyTime;
+  const wti = document.getElementById('weeklyTimeInput'); if (wti) wti.value = summaryPrefs.weeklyTime;
+  const wdl = document.getElementById('weeklyDayLabel'); if (wdl) wdl.textContent = DAY_NAMES[summaryPrefs.weeklyDay];
+  const wdi = document.getElementById('weeklyDayInput'); if (wdi) wdi.value = String(summaryPrefs.weeklyDay);
+}
+function toggleDailySummary() { summaryPrefs.dailyEnabled = !summaryPrefs.dailyEnabled; saveSummaryPrefs(); }
+function toggleWeeklySummary() { summaryPrefs.weeklyEnabled = !summaryPrefs.weeklyEnabled; saveSummaryPrefs(); }
+function setDailyTime() { summaryPrefs.dailyTime = document.getElementById('dailyTimeInput').value || '20:00'; saveSummaryPrefs(); }
+function setWeeklyTime() { summaryPrefs.weeklyTime = document.getElementById('weeklyTimeInput').value || '10:00'; saveSummaryPrefs(); }
+function setWeeklyDay() { summaryPrefs.weeklyDay = parseInt(document.getElementById('weeklyDayInput').value); saveSummaryPrefs(); }
+
+async function generateSummary(range) {
+  const now = Date.now();
+  const windowMs = range === 'weekly' ? 7*24*60*60*1000 : 24*60*60*1000;
+  const mems = memories.filter(m => (now - new Date(m.ts).getTime()) < windowMs);
+  const rems = reminders.filter(r => r.date && (now - new Date(r.date + 'T' + (r.time||'00:00')).getTime()) < windowMs);
+  const prompt = `סכם את ההישגים של המשתמש ב-${range === 'weekly' ? 'שבוע האחרון' : '24 השעות האחרונות'} בצורה חמה ומעודדת.
+זיכרונות (${mems.length}): ${mems.slice(0,10).map(m=>m.text).join(' | ')}
+תזכורות (${rems.length}): ${rems.slice(0,10).map(r=>r.title).join(' | ')}
+כתוב 2-3 משפטים בלבד בעברית עם אמוג'י.`;
+  try {
+    const body = { contents: [{role:'user', parts:[{text:prompt}]}], generationConfig:{temperature:0.8, maxOutputTokens:200} };
+    const data = await callGeminiModel(body, MODELS[activeModelIdx]);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || 'סיכום לא זמין';
+    if (Notification.permission === 'granted') {
+      try { new Notification(range === 'weekly' ? '📊 סיכום שבועי' : '📊 סיכום יומי', { body: text, icon: buildAvatarUrl(avatarCfg, 128) }); } catch(e){}
+    }
+    toast('📊 ' + (range==='weekly'?'סיכום שבועי':'סיכום יומי'));
+    alert((range==='weekly'?'📊 סיכום שבועי\n\n':'📊 סיכום יומי\n\n') + text);
+  } catch(e) { console.warn('summary failed', e); }
+}
+
+function checkSummaryTriggers() {
+  const now = new Date();
+  const hhmm = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  // Daily
+  if (summaryPrefs.dailyEnabled && hhmm === summaryPrefs.dailyTime) {
+    const last = localStorage.getItem('mg_last_daily');
+    const today = now.toISOString().split('T')[0];
+    if (last !== today) {
+      localStorage.setItem('mg_last_daily', today);
+      generateSummary('daily');
+    }
+  }
+  // Weekly
+  if (summaryPrefs.weeklyEnabled && now.getDay() === summaryPrefs.weeklyDay && hhmm === summaryPrefs.weeklyTime) {
+    const last = localStorage.getItem('mg_last_weekly');
+    const today = now.toISOString().split('T')[0];
+    if (last !== today) {
+      localStorage.setItem('mg_last_weekly', today);
+      generateSummary('weekly');
+    }
+  }
+}
+
+/* ══ DYNAMIC SYSTEM PROMPT ══ */
+function getDynamicSystemPrompt() {
+  const style = STYLES.find(s => s.id === currentStyle) || STYLES[0];
+  const genderRef = avatarCfg.gender === 'female' ? 'ידידותית' : 'ידידותי';
+  const uName = userNickname || userName || 'המשתמש';
+  const extra = `\n\nזהות:
+אתה ${avatarName}, עוזר ${genderRef}. המשתמש נקרא ${uName}.
+כשהמשתמש פונה אליך בשם '${avatarName}' דע שזה כלפיך.
+אם המשתמש אומר 'קרא לי X' או 'תקרא לי X', זכור את זה — קרא לו כך מהרגע הזה.
+
+יצירת תזכורות:
+כשהמשתמש מבקש תזכורת, החזר בתוך התשובה שלך JSON בפורמט:
+<<<REMINDER>>>
+{"title":"...","date":"YYYY-MM-DD","time":"HH:MM","details":"..."}
+<<<END>>>
+אם חסר מידע קריטי (זמן/תאריך), שאל שאלה קצרה להשלמה במקום ה-JSON.
+אם התזכורת עמומה, הצע עזרה: "אולי תבדוק ב-X?".`;
+  return SYSTEM_PROMPT + (style.prompt ? '\n\nסגנון דיבור נוכחי:\n' + style.prompt : '') + extra;
+}
+
+/* ══ GOOGLE CLOUD TTS ══ */
+const _ttsCache = new Map();
+async function speakGoogle(text, persona) {
+  if (!GCP_TTS_API_KEY || GCP_TTS_API_KEY === 'YOUR_KEY_HERE') throw new Error('No GCP key');
+  // Never narrate emojis
+  text = stripEmojis(text);
+  if (!text) throw new Error('Empty after emoji strip');
+  const lang = detectLang(text);
+  const cacheKey = lang + '|' + persona.id + '|' + text;
+  if (_ttsCache.has(cacheKey)) {
+    const audio = new Audio('data:audio/mp3;base64,' + _ttsCache.get(cacheKey));
+    audio.play(); return audio;
+  }
+  const voiceName = lang === 'he-IL' ? persona.voice : undefined;
+  const body = {
+    input: { text },
+    voice: voiceName ? { languageCode: lang, name: voiceName } : { languageCode: lang, ssmlGender: persona.gender.toUpperCase() },
+    audioConfig: { audioEncoding: 'MP3', pitch: persona.pitch || 0, speakingRate: persona.rate || 1.0 }
+  };
+  const res = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + GCP_TTS_API_KEY, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error('TTS ' + res.status);
+  const data = await res.json();
+  if (!data.audioContent) throw new Error('No audio');
+  _ttsCache.set(cacheKey, data.audioContent);
+  const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
+  audio.play();
+  return audio;
+}
+
+/* ══ VOICE MODE (continuous) ══ */
+let _voiceLoopActive = false;
+function voiceOverlayShow(show) {
+  const o = document.getElementById('voiceOverlay');
+  if (o) o.style.display = show ? 'flex' : 'none';
+  if (show) {
+    const av = document.getElementById('voiceOverlayAvatar');
+    if (av) av.innerHTML = `<img src="${buildAvatarUrl(avatarCfg, 320)}" alt="avatar">`;
+  }
+}
+function voiceOverlayStatus(txt) {
+  const s = document.getElementById('voiceOverlayStatus');
+  if (s) s.textContent = txt;
+}
+function voiceOverlayTranscript(txt) {
+  const t = document.getElementById('voiceOverlayTranscript');
+  if (t) t.textContent = txt || '';
+}
+
+/* ══ SETUP ══ */
+function startApp() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key || !key.startsWith('AIza')) {
+    const err = document.getElementById('setupError');
+    err.textContent = 'נראה שהמפתח לא תקין. מפתח Gemini API מתחיל ב-"AIza..."';
+    err.style.display = 'block';
+    return;
+  }
+  apiKey = key;
+  localStorage.setItem('mg_api_key', key);
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('phone').style.display = 'flex';
+  initApp();
+}
+
+/* ══ INIT ══ */
+function initApp() {
+  renderIcons();
+  updateClock();
+  setInterval(updateClock, 30000);
+  renderAvatar();
+  updateGreeting();
+  renderStats();
+  renderHubMemories();
+  renderHubReminders();
+  renderMemoriesScreen();
+  updateSettingsDisplay();
+  updateIntegrationsUI();
+  updateSummariesUI();
+  document.getElementById('r-date').value = new Date().toISOString().split('T')[0];
+  renderStyleChips();
+  renderPersonaChips();
+  loadVoices();
+  setTimeout(renderIcons, 50);
+  // Schedule existing reminders
+  scheduleAllReminders();
+  // Check summaries every minute
+  setInterval(checkSummaryTriggers, 60000);
+  // Show onboarding on first run
+  if (!localStorage.getItem('mg_onboarded')) {
+    setTimeout(() => { go('s-onboard'); onbNext(1); }, 200);
+  } else {
+    requestNotifPermission();
+  }
+  const v = document.getElementById('appVersionLabel'); if (v) v.textContent = APP_VERSION;
+  const v2 = document.getElementById('footerVersion'); if (v2) v2.textContent = APP_VERSION;
+}
+
+function updateClock() {
+  const now = new Date();
+  const t = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+  document.querySelectorAll('#clockEl, #clockEl2').forEach(el => { if(el) el.textContent = t; });
+}
+
+function updateGreeting() {
+  const h = new Date().getHours();
+  let g = h < 12 ? 'בוקר טוב' : h < 17 ? 'צהריים טובים' : h < 21 ? 'ערב טוב' : 'לילה טוב';
+  const name = userNickname || userName;
+  document.getElementById('greetEl').textContent = g + (name ? ', ' + name : '') + ' 👋';
+}
+
+/* ══ NAVIGATION ══ */
+function go(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  // Update tab active states in every tabbar
+  document.querySelectorAll('.tabbar').forEach(tb => {
+    tb.querySelectorAll('.tab').forEach(tab => {
+      const fn = tab.getAttribute('onclick') || '';
+      tab.classList.toggle('active', fn.includes(`'${id}'`));
+    });
+  });
+  // Refresh data on navigation
+  if (id === 's-hub') renderHubMemories(), renderHubReminders(), renderStats();
+  if (id === 's-memories') renderMemoriesScreen();
+  if (id === 's-reminders') renderRemindersScreen();
+  if (id === 's-settings') updateSettingsDisplay();
+  if (id === 's-avatar-edit') renderAvatarEditScreen();
+  if (id === 's-companion') introAvatarInChat();
+  renderAvatar();
+}
+
+function introAvatarInChat() {
+  // Add self-introduction bubble if first time after opening chat with new chatHistory
+  const list = document.getElementById('chatList');
+  if (!list) return;
+  // Only add intro if chatHistory is empty (fresh/cleared chat)
+  if (chatHistory.length === 0 && !list.dataset.introduced) {
+    const name = userNickname || userName || 'חבר';
+    const ready = avatarCfg.gender === 'female' ? 'מוכנה' : 'מוכן';
+    const introText = `שלום ${name}! אני ${avatarName}, ${ready} לעזור. במה אוכל לעזור?`;
+    // Replace default bubble content
+    const defaultBubble = list.querySelector('.bubble-ai');
+    if (defaultBubble) {
+      defaultBubble.innerHTML = escHtml(introText) + `<div class="bubble-time">עכשיו</div>`;
+    }
+    list.dataset.introduced = '1';
+  }
+}
+function showModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id, e) {
+  if (!e || e.target === document.getElementById(id))
+    document.getElementById(id).classList.remove('open');
+}
+
+/* ══ STATS ══ */
+function renderStats() {
+  document.getElementById('memCount').textContent = memories.length;
+  document.getElementById('chatCount').textContent = totalChats;
+  document.getElementById('remCount').textContent = reminders.length;
+}
+
+/* ══ MEMORIES ══ */
+function saveMemory(text, source='AI') {
+  const mem = { id: Date.now(), text, source, ts: new Date().toISOString() };
+  memories.unshift(mem);
+  localStorage.setItem('mg_memories', JSON.stringify(memories));
+  renderStats();
+  renderHubMemories();
+  renderMemoriesScreen();
+}
+
+function deleteMemory(id) {
+  memories = memories.filter(m => m.id !== id);
+  localStorage.setItem('mg_memories', JSON.stringify(memories));
+  renderStats();
+  renderHubMemories();
+  renderMemoriesScreen();
+  toast('זיכרון נמחק');
+}
+
+function renderHubMemories() {
+  const el = document.getElementById('hubMemories');
+  if (memories.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--text-3);font-size:13px">עדיין אין זיכרונות — שוחח עם ה-AI כדי להוסיף</div>`;
+    return;
+  }
+  el.innerHTML = memories.slice(0, 4).map(m => `
+    <div class="memory-item" onclick="go('s-memories')">
+      <div class="memory-item-text">${escHtml(m.text)}</div>
+      <div class="memory-item-meta">${formatTime(m.ts)} · ${m.source}</div>
+    </div>
+  `).join('');
+}
+
+function renderMemoriesScreen() {
+  const el = document.getElementById('memoriesList');
+  if (memories.length === 0) {
+    el.innerHTML = `<div class="memory-empty">
+      <div class="memory-empty-icon">🧠</div>
+      <div class="memory-empty-title">אין זיכרונות עדיין</div>
+      <div class="memory-empty-sub">שוחח עם MindGuide AI ולחץ "שמור כזיכרון" על כל תגובה חשובה</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = memories.map(m => `
+    <div class="memory-item" style="cursor:default">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1">
+          <div class="memory-item-text">${escHtml(m.text)}</div>
+          <div class="memory-item-meta">${formatTime(m.ts)} · ${m.source}</div>
+        </div>
+        <button onclick="deleteMemory(${m.id})" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px;flex-shrink:0;margin-top:2px">
+          ${ic('trash','16','var(--text-3)')}
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function clearMemories() {
+  if (!confirm('למחוק את כל הזיכרונות?')) return;
+  memories = [];
+  localStorage.setItem('mg_memories', JSON.stringify(memories));
+  renderStats(); renderHubMemories(); renderMemoriesScreen(); updateSettingsDisplay();
+  toast('כל הזיכרונות נמחקו');
+}
+
+/* ══ REMINDERS ══ */
+function saveReminder() {
+  const title = document.getElementById('r-title').value.trim();
+  if (!title) { toast('נא להזין שם לתזכורת'); return; }
+  const date = document.getElementById('r-date').value;
+  const time = document.getElementById('r-time').value;
+  const rem = { id: Date.now(), title, date, time, ts: new Date().toISOString() };
+  reminders.unshift(rem);
+  localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+  scheduleReminderNotification(rem);
+  closeModal('m-reminder');
+  renderStats();
+  renderHubReminders();
+  renderRemindersScreen();
+  updateSettingsDisplay();
+  toast('✅ תזכורת נשמרה: ' + title);
+  document.getElementById('r-title').value = '';
+}
+
+function deleteReminder(id) {
+  reminders = reminders.filter(r => r.id !== id);
+  localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+  renderStats(); renderHubReminders(); renderRemindersScreen(); updateSettingsDisplay();
+  toast('תזכורת נמחקה');
+}
+
+function _reminderItemHtml(r) {
+  return `
+    <div class="memory-item" style="cursor:default;display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:10px;background:#FFF4DB;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        ${ic('bell','18','#D97000')}
+      </div>
+      <div style="flex:1">
+        <div class="memory-item-text">${escHtml(r.title)}</div>
+        <div class="memory-item-meta">⏰ ${r.date} ${r.time}</div>
+      </div>
+      <button onclick="deleteReminder(${r.id})" style="background:none;border:none;cursor:pointer;color:var(--text-3);padding:2px">
+        ${ic('x','16','var(--text-3)')}
+      </button>
+    </div>`;
+}
+
+function renderHubReminders() {
+  const el = document.getElementById('hubReminders');
+  const sec = document.getElementById('remindersSection');
+  if (!el || !sec) return;
+  if (reminders.length === 0) { el.innerHTML = ''; sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  el.innerHTML = reminders.slice(0, 3).map(_reminderItemHtml).join('');
+}
+
+function renderRemindersScreen() {
+  const el = document.getElementById('remindersList');
+  if (!el) return;
+  if (reminders.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--text-3);font-size:14px">
+      אין תזכורות עדיין.<br>הוסף תזכורת חדשה או בקש מה-AI ליצור אחת.
+    </div>`;
+    return;
+  }
+  el.innerHTML = reminders.map(_reminderItemHtml).join('');
+}
+
+/* ══ SETTINGS ══ */
+function updateSettingsDisplay() {
+  const mc = document.getElementById('settingsMemCount');
+  if (mc) mc.textContent = memories.length + ' זיכרונות';
+  const rc = document.getElementById('settingsRemCount');
+  if (rc) rc.textContent = reminders.length + ' תזכורות';
+  renderStyleChips();
+  renderPersonaChips();
+  const tog = document.getElementById('autoSpeakToggle');
+  if (tog) tog.classList.toggle('on', autoSpeak);
+}
+
+function clearAll() {
+  if (!confirm('למחוק הכל (זיכרונות, תזכורות, היסטוריית שיחה)?')) return;
+  memories = []; reminders = []; chatHistory = []; totalChats = 0;
+  localStorage.setItem('mg_memories', '[]');
+  localStorage.setItem('mg_reminders', '[]');
+  localStorage.removeItem('mg_chat_count');
+  renderStats(); renderHubMemories(); renderHubReminders();
+  toast('הכל נוקה');
+}
+
+/* ══ AI CHAT ══ */
+const MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+];
+let activeModelIdx = parseInt(localStorage.getItem('mg_model_idx') || '0');
+
+async function callGeminiModel(body, model) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err?.error?.message || `HTTP ${res.status}`;
+    const isQuota = msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED') || res.status === 429;
+    const isOverload = res.status === 503 || msg.toLowerCase().includes('overloaded') || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('unavailable');
+    throw Object.assign(new Error(msg), { isQuota, isOverload, status: res.status });
+  }
+  return res.json();
+}
+
+async function callGemini(userMessage) {
+  // Detect nickname change in user message
+  try { detectNicknameChange(userMessage); } catch(e) {}
+  chatHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+
+  const body = {
+    system_instruction: { parts: [{ text: getSystemPrompt() }] },
+    contents: chatHistory,
+    generationConfig: { temperature: 0.8, maxOutputTokens: 400 }
+  };
+
+  let data, lastErr;
+  // Try each model. For overload/quota errors, retry with backoff before falling back.
+  outer: for (let i = 0; i < MODELS.length; i++) {
+    const idx = (activeModelIdx + i) % MODELS.length;
+    const delays = [0, 800, 2000]; // 3 attempts per model with backoff
+    for (let attempt = 0; attempt < delays.length; attempt++) {
+      if (delays[attempt]) await new Promise(r => setTimeout(r, delays[attempt]));
+      try {
+        data = await callGeminiModel(body, MODELS[idx]);
+        if (i !== 0) { activeModelIdx = idx; localStorage.setItem('mg_model_idx', idx); }
+        break outer;
+      } catch(e) {
+        lastErr = e;
+        if (!e.isQuota && !e.isOverload) throw e; // non-retryable → abort
+        // otherwise retry same model (next attempt) or fall through to next model
+      }
+    }
+  }
+  if (!data) throw lastErr;
+
+  let aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '...';
+
+  // Parse reminder JSON from AI response
+  let reminderCreated = null;
+  const rm = aiText.match(/<<<REMINDER>>>([\s\S]+?)<<<END>>>/);
+  if (rm) {
+    try {
+      const r = JSON.parse(rm[1].trim());
+      if (r.title) {
+        const rem = {
+          id: Date.now(),
+          title: r.title,
+          date: r.date || new Date().toISOString().split('T')[0],
+          time: r.time || '09:00',
+          details: r.details || ''
+        };
+        reminders.unshift(rem);
+        localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+        scheduleReminderNotification(rem);
+        reminderCreated = rem;
+        renderStats(); renderHubReminders(); renderRemindersScreen();
+      }
+    } catch(e) { console.warn('reminder parse failed', e); }
+    aiText = aiText.replace(/<<<REMINDER>>>[\s\S]+?<<<END>>>/, '').trim();
+    if (reminderCreated) aiText += `\n\n⏰ נוספה תזכורת: ${reminderCreated.title} (${reminderCreated.date} ${reminderCreated.time})`;
+  }
+
+  chatHistory.push({ role: 'model', parts: [{ text: aiText }] });
+
+  // Auto-detect memory intent in AI response
+  const shouldSave = aiText.includes('✅ שמרתי') || aiText.includes('שמרתי כזיכרון');
+  if (shouldSave) {
+    saveMemory(userMessage, 'שיחה');
+  }
+
+  return { text: aiText, autoSaved: shouldSave };
+}
+
+function sendMsg() {
+  const inp = document.getElementById('chatInput');
+  const txt = inp.value.trim();
+  if (!txt || !apiKey) return;
+
+  const list = document.getElementById('chatList');
+  const typEl = document.getElementById('typing');
+  const sendBtn = document.getElementById('sendBtn');
+
+  // Add user bubble
+  const ub = document.createElement('div');
+  ub.innerHTML = `<div class="bubble bubble-user">${escHtml(txt)}<div class="bubble-time bubble-time-user">${nowTime()}</div></div>`;
+  list.insertBefore(ub, typEl);
+  inp.value = '';
+
+  // Show typing
+  typEl.classList.add('show');
+  sendBtn.disabled = true;
+  document.getElementById('compStatus').textContent = 'חושב... 🤔';
+  list.scrollTop = list.scrollHeight;
+
+  // Count chat
+  totalChats++;
+  localStorage.setItem('mg_chat_count', totalChats);
+
+  // Call Gemini
+  callGemini(txt).then(({ text, autoSaved }) => {
+    typEl.classList.remove('show');
+    sendBtn.disabled = false;
+    document.getElementById('compStatus').textContent = 'מוכן לעזור ✦';
+
+    const ab = document.createElement('div');
+    const saveBtn = autoSaved
+      ? `<div style="margin-top:6px;font-size:11px;color:var(--green)">✅ נשמר אוטומטית כזיכרון</div>`
+      : `<button class="bubble-save-btn" onclick="saveMemory(${JSON.stringify(txt)},'שיחה');this.outerHTML='<span style=&quot;font-size:11px;color:var(--green)&quot;>✅ נשמר</span>';toast('נשמר כזיכרון')">
+           ${ic('brain','12','var(--brand)')} שמור כזיכרון
+         </button>`;
+
+    const rawText = text;
+    ab.innerHTML = `<div class="bubble bubble-ai">${mdToHtml(text)}<div class="bubble-time" style="display:flex;align-items:center;gap:6px">${nowTime()}<button class="speak-btn" onclick="toggleSpeakBtn(this,${JSON.stringify(rawText)})" title="קרא בקול">${ic('volume','14','currentColor')}</button></div>${saveBtn}</div>`;
+    list.insertBefore(ab, typEl);
+    list.scrollTop = list.scrollHeight;
+    renderStats();
+    if (autoSpeak) speakText(rawText);
+  }).catch(err => {
+    typEl.classList.remove('show');
+    sendBtn.disabled = false;
+    document.getElementById('compStatus').textContent = 'שגיאה ⚠️';
+    // Friendly Hebrew error message
+    let friendly = err.message;
+    if (err.isOverload) friendly = 'המודל עמוס כרגע 🥵 נסה שוב בעוד כמה שניות.';
+    else if (err.isQuota) friendly = 'חרגת ממכסת השימוש ל-Gemini. נסה שוב בעוד כמה דקות.';
+    else if (err.message?.includes('API key')) friendly = 'בעיה במפתח ה-API של Gemini.';
+    else if (err.message?.includes('network') || err.message?.includes('Failed to fetch')) friendly = 'אין חיבור לאינטרנט 📡';
+    const ab = document.createElement('div');
+    ab.innerHTML = `<div class="bubble bubble-ai" style="border-color:#fca5a5;background:#fff5f5">
+      <span style="color:var(--red)">⚠️ ${escHtml(friendly)}</span>
+      <div class="bubble-time">${nowTime()}</div>
+    </div>`;
+    list.insertBefore(ab, typEl);
+    list.scrollTop = list.scrollHeight;
+    // Roll back user message from history so retry won't double-add
+    if (chatHistory.length && chatHistory[chatHistory.length-1].role === 'user') chatHistory.pop();
+  });
+}
+
+function clearChat() {
+  chatHistory = [];
+  const list = document.getElementById('chatList');
+  const typing = document.getElementById('typing');
+  // Keep only the typing indicator
+  while (list.firstChild && list.firstChild !== typing) {
+    list.removeChild(list.firstChild);
+  }
+  const name = userNickname || userName || 'חבר';
+  const ready = avatarCfg.gender === 'female' ? 'מוכנה' : 'מוכן';
+  const welcome = document.createElement('div');
+  welcome.innerHTML = `<div class="bubble bubble-ai">שלום ${escHtml(name)}! אני ${escHtml(avatarName)}, ${ready} לעזור 🧠<div class="bubble-time">${nowTime()}</div></div>`;
+  list.insertBefore(welcome, typing);
+  list.dataset.introduced = '1';
+  toast('שיחה חדשה התחילה');
+}
+
+/* ══ TOAST ══ */
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toastEl');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 2800);
+}
+
+/* ══ UTILS ══ */
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function mdToHtml(text) {
+  return escHtml(text)
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+function nowTime() {
+  const d = new Date();
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+function formatTime(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = Math.floor((now - d) / 60000);
+  if (diff < 1) return 'עכשיו';
+  if (diff < 60) return `לפני ${diff} דקות`;
+  if (diff < 1440) return `לפני ${Math.floor(diff/60)} שעות`;
+  return d.toLocaleDateString('he-IL');
+}
+
+/* ══ AUTO-START ══ */
+if (apiKey) {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('phone').style.display = 'flex';
+  initApp();
+} else {
+  document.getElementById('apiKeyInput').focus();
+}
+</script>
+</body>
+</html>
