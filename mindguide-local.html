@@ -1417,6 +1417,17 @@ body {
       <div class="ae-color-row" id="aeColors"></div>
     </div>
 
+    <div class="ae-section">
+      <div class="ae-label">🔊 קול האווטאר</div>
+      <div id="aeVoiceChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px"></div>
+      <div style="font-size:11px;color:var(--text-3);padding:0 2px">לחצו על קול כדי לבחור + להשמיע דוגמה</div>
+    </div>
+
+    <div class="ae-section">
+      <div class="ae-label">🎭 סגנון שיחה</div>
+      <div id="aeStyleChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+
     <div style="padding:16px 20px 90px">
       <button class="btn btn-primary" style="width:100%;border-radius:13px" onclick="go('s-hub')">שמור וסיים</button>
     </div>
@@ -1858,6 +1869,14 @@ function startVoiceConversation() {
   _voiceLoopTick();
 }
 
+// Continuous always-on VAD voice loop.
+// Listens non-stop. A silence-timer fires sendCurrent() after 900ms of no new interim.
+// While the AI speaks, recognition is paused; it auto-resumes when TTS ends.
+let _silenceTimer = null;
+let _vadBuffer = '';
+let _vadSpeaking = false; // true while AI is speaking — suspend STT
+let _vadBusy = false;     // true while we're calling Gemini+TTS
+
 function _voiceLoopTick() {
   if (!_voiceLoopActive) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1865,20 +1884,22 @@ function _voiceLoopTick() {
   const rec = new SR();
   _voiceRecognition = rec;
   rec.lang = 'he-IL';
-  rec.continuous = false;
+  rec.continuous = true;     // NEVER stop listening mid-sentence
   rec.interimResults = true;
-  rec.maxAlternatives = 1;
-  let finalText = '';
-  let lastInterim = '';
-  rec.onstart = () => { _voiceErrorCount = 0; voiceOverlayStatus('מקשיב... 🎙️'); };
+  rec.maxAlternatives = 3;
+  _vadBuffer = '';
+  if (_silenceTimer) { clearTimeout(_silenceTimer); _silenceTimer = null; }
+
+  rec.onstart = () => { _voiceErrorCount = 0; if (!_vadBusy && !_vadSpeaking) voiceOverlayStatus('מקשיב... 🎙️'); };
   rec.onresult = (e) => {
+    if (_vadSpeaking || _vadBusy) return; // ignore while AI talks
     const t = Array.from(e.results).map(r=>r[0].transcript).join('');
+    _vadBuffer = t;
     voiceOverlayTranscript(t);
-    lastInterim = t;
-    if (e.results[e.results.length-1].isFinal) finalText = t;
+    if (_silenceTimer) clearTimeout(_silenceTimer);
+    _silenceTimer = setTimeout(_vadFireSend, 900);
   };
   rec.onerror = (e) => {
-    // Fatal errors: never retry
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'permission-denied') {
       _micPermissionDenied = true;
       toast('🎙️ אין הרשאה למיקרופון');
@@ -1890,49 +1911,61 @@ function _voiceLoopTick() {
       stopVoiceConversation();
       return;
     }
-    // Benign errors: allow a few retries then give up
     _voiceErrorCount++;
-    if (_voiceErrorCount > 3) {
+    if (_voiceErrorCount > 5) {
       toast('⚠️ שיחה קולית הופסקה (יותר מדי שגיאות)');
       stopVoiceConversation();
       return;
     }
-    if (_voiceLoopActive) setTimeout(_voiceLoopTick, 800);
+    // benign (no-speech / aborted) — restart shortly
+    if (_voiceLoopActive && !_vadSpeaking && !_vadBusy) setTimeout(_voiceLoopTick, 500);
   };
-  rec.onend = async () => {
+  rec.onend = () => {
+    // continuous session ended (mic auto-off after ~60s on some browsers) — restart if still active
     if (!_voiceLoopActive) return;
-    // On Android Chrome isFinal often never fires; fall back to the latest
-    // interim transcript once onend triggers (recognizer has stopped listening).
-    const txt = ((finalText || lastInterim) || '').trim();
-    if (!txt) { setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 400); return; }
-    voiceOverlayStatus('חושב... 🤔');
-    try {
-      const { text } = await callGemini(txt);
-      if (!_voiceLoopActive) return;
-      voiceOverlayStatus('מדבר... 🔊');
-      voiceOverlayTranscript((text||'').substring(0, 200));
-      await speakText(text);
-      setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 2800);
-    } catch(e) {
-      _voiceErrorCount++;
-      if (_voiceErrorCount > 3) { stopVoiceConversation(); return; }
-      voiceOverlayStatus('שגיאה — מנסה שוב');
-      setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 2000);
-    }
+    if (!_vadSpeaking && !_vadBusy) setTimeout(_voiceLoopTick, 200);
   };
   try { rec.start(); } catch(e) {
     _voiceErrorCount++;
+    if (_voiceErrorCount > 5) { stopVoiceConversation(); return; }
+    setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 500);
+  }
+}
+
+async function _vadFireSend() {
+  _silenceTimer = null;
+  if (!_voiceLoopActive || _vadBusy || _vadSpeaking) return;
+  let txt = (_vadBuffer || '').trim();
+  _vadBuffer = '';
+  // Strip opening addressal like "אווטאר" / "מיינדגייד" / avatarName
+  if (avatarName) txt = txt.replace(new RegExp('^(אווטאר|'+avatarName+'|MindGuide|מיינדגייד|mindguide)[,،:\\s]+','i'),'');
+  if (!txt || txt.length < 2) return;
+  _vadBusy = true;
+  voiceOverlayStatus('חושב... 🤔');
+  // Pause STT while we process + speak
+  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
+  try {
+    await callGeminiVoice(txt);
+  } catch(e) {
+    _voiceErrorCount++;
+    voiceOverlayStatus('שגיאה — מנסה שוב');
     if (_voiceErrorCount > 3) { stopVoiceConversation(); return; }
-    setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 800);
+  } finally {
+    _vadBusy = false;
+    // Resume listening immediately
+    if (_voiceLoopActive) { voiceOverlayStatus('מקשיב... 🎙️'); _voiceLoopTick(); }
   }
 }
 
 function stopVoiceConversation() {
   _voiceLoopActive = false;
   voiceModeActive = false;
+  if (_silenceTimer) { clearTimeout(_silenceTimer); _silenceTimer = null; }
+  _vadBusy = false; _vadSpeaking = false; _vadBuffer = '';
   if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
   if (window.speechSynthesis) speechSynthesis.cancel();
   if (typeof _currentAudio !== 'undefined' && _currentAudio) { try{_currentAudio.pause();}catch(e){} _currentAudio = null; }
+  if (typeof _ttsQueue !== 'undefined') _ttsQueue.reset();
   document.querySelectorAll('.voice-fab').forEach(b => b.classList.toggle('active', false));
   voiceOverlayShow(false);
 }
@@ -2162,7 +2195,39 @@ function renderAvatarEditScreen() {
       `<div class="ae-color${c===avatarCfg.backgroundColor?' active':''}" style="background:#${c}" onclick="setAvatarField('backgroundColor','${c}')"></div>`
     ).join('');
   }
+  // Voice chips
+  const vc = document.getElementById('aeVoiceChips');
+  if (vc) {
+    vc.innerHTML = PERSONAS.map(p =>
+      `<button class="style-chip${p.id===selPersonaId?' active':''}" onclick="setAvatarVoice('${p.id}')">${p.label}</button>`
+    ).join('');
+  }
+  // Style chips
+  const sc = document.getElementById('aeStyleChips');
+  if (sc) {
+    sc.innerHTML = STYLES.map(s =>
+      `<button class="style-chip${s.id===currentStyle?' active':''}" onclick="setAvatarStyle('${s.id}')">${s.label}</button>`
+    ).join('');
+  }
   _attachCarouselSwipe();
+}
+
+function setAvatarVoice(id) {
+  selPersonaId = id;
+  localStorage.setItem('mg_persona', id);
+  renderAvatarEditScreen();
+  const p = PERSONAS.find(x => x.id === id);
+  const sample = 'שלום, אני ' + (avatarName || 'MindGuide') + ', נעים להכיר.';
+  speakText(sample);
+  toast((p?.label || id) + ' נבחר');
+}
+
+function setAvatarStyle(id) {
+  currentStyle = id;
+  localStorage.setItem('mg_style', id);
+  renderAvatarEditScreen();
+  const s = STYLES.find(x => x.id === id);
+  toast('סגנון: ' + (s?.label || id));
 }
 
 /* Touch-swipe on the carousel preview */
@@ -2375,18 +2440,30 @@ function getDynamicSystemPrompt() {
   const style = STYLES.find(s => s.id === currentStyle) || STYLES[0];
   const genderRef = avatarCfg.gender === 'female' ? 'ידידותית' : 'ידידותי';
   const uName = userNickname || userName || 'המשתמש';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const today = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  const tomorrow = new Date(now.getTime()+86400000);
+  const tomStr = tomorrow.getFullYear()+'-'+pad(tomorrow.getMonth()+1)+'-'+pad(tomorrow.getDate());
+  const timeStr = pad(now.getHours())+':'+pad(now.getMinutes());
+  const dow = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][now.getDay()];
   const extra = `\n\nזהות:
 אתה ${avatarName}, עוזר ${genderRef}. המשתמש נקרא ${uName}.
 כשהמשתמש פונה אליך בשם '${avatarName}' דע שזה כלפיך.
 אם המשתמש אומר 'קרא לי X' או 'תקרא לי X', זכור את זה — קרא לו כך מהרגע הזה.
 
-יצירת תזכורות:
-כשהמשתמש מבקש תזכורת, החזר בתוך התשובה שלך JSON בפורמט:
+התאריך כעת: ${today} ${timeStr} (יום ${dow}). מחר: ${tomStr}.
+
+יצירת תזכורות (חשוב!):
+כשהמשתמש מבקש תזכורת/לזכור משהו, החזר בתשובתך בלוק ב-EXACT הפורמט:
 <<<REMINDER>>>
 {"title":"...","date":"YYYY-MM-DD","time":"HH:MM","details":"..."}
 <<<END>>>
-אם חסר מידע קריטי (זמן/תאריך), שאל שאלה קצרה להשלמה במקום ה-JSON.
-אם התזכורת עמומה, הצע עזרה: "אולי תבדוק ב-X?".`;
+דוגמאות עם תאריכים אמיתיים:
+- "תזכיר לי להתקשר לאמא מחר ב-3" → date:"${tomStr}", time:"15:00"
+- "תזכיר לי ב-8 בערב לקחת תרופה" → date:"${today}" (או ${tomStr} אם כבר עבר), time:"20:00"
+- "תזכיר לי בעוד שעה" → date:"${today}", time:"${pad((now.getHours()+1)%24)}:${pad(now.getMinutes())}"
+אם חסר מידע קריטי (זמן/תאריך), שאל שאלה קצרה להשלמה במקום ה-JSON.`;
   return SYSTEM_PROMPT + (style.prompt ? '\n\nסגנון דיבור נוכחי:\n' + style.prompt : '') + extra;
 }
 
@@ -2419,6 +2496,32 @@ async function speakGoogle(text, persona) {
   const audio = new Audio('data:audio/mp3;base64,' + data.audioContent);
   audio.play();
   return audio;
+}
+
+// Speak text and return a Promise that resolves when playback ends.
+async function speakTextAwait(text) {
+  if (_currentAudio) { try { _currentAudio.pause(); } catch(e){} _currentAudio = null; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (!text) return;
+  const persona = PERSONAS.find(p => p.id === selPersonaId) || PERSONAS[0];
+  try {
+    const audio = await speakGoogle(text, persona);
+    _currentAudio = audio;
+    return new Promise(res => {
+      audio.onended = () => { _currentAudio = null; res(); };
+      audio.onerror = () => { _currentAudio = null; res(); };
+    });
+  } catch(e) {
+    // fallback to browser TTS
+  }
+  if (!window.speechSynthesis) return;
+  const utt = _buildUtt(text);
+  if (!utt) return;
+  return new Promise(res => {
+    utt.onend = res;
+    utt.onerror = res;
+    speechSynthesis.speak(utt);
+  });
 }
 
 /* ══ VOICE MODE (continuous) ══ */
@@ -2705,11 +2808,10 @@ function clearAll() {
 }
 
 /* ══ AI CHAT ══ */
-const MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-];
+// Chat = high quality. Voice = low latency (flash-lite). Fallback chains both.
+const MODELS_CHAT  = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
+const MODELS_VOICE = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite', 'gemini-2.5-flash'];
+const MODELS = MODELS_CHAT; // legacy
 let activeModelIdx = parseInt(localStorage.getItem('mg_model_idx') || '0');
 
 async function callGeminiModel(body, model) {
@@ -2736,25 +2838,24 @@ async function callGemini(userMessage) {
 
   const body = {
     system_instruction: { parts: [{ text: getSystemPrompt() }] },
-    contents: chatHistory,
-    generationConfig: { temperature: 0.8, maxOutputTokens: 400 }
+    contents: _trimHistoryForVoice(chatHistory, 16),
+    generationConfig: { temperature: 0.6, maxOutputTokens: 500 }
   };
 
   let data, lastErr;
   // Try each model. For overload/quota errors, retry with backoff before falling back.
-  outer: for (let i = 0; i < MODELS.length; i++) {
-    const idx = (activeModelIdx + i) % MODELS.length;
-    const delays = [0, 800, 2000]; // 3 attempts per model with backoff
+  outer: for (let i = 0; i < MODELS_CHAT.length; i++) {
+    const idx = (activeModelIdx + i) % MODELS_CHAT.length;
+    const delays = [0, 600, 1500];
     for (let attempt = 0; attempt < delays.length; attempt++) {
       if (delays[attempt]) await new Promise(r => setTimeout(r, delays[attempt]));
       try {
-        data = await callGeminiModel(body, MODELS[idx]);
+        data = await callGeminiModel(body, MODELS_CHAT[idx]);
         if (i !== 0) { activeModelIdx = idx; localStorage.setItem('mg_model_idx', idx); }
         break outer;
       } catch(e) {
         lastErr = e;
-        if (!e.isQuota && !e.isOverload) throw e; // non-retryable → abort
-        // otherwise retry same model (next attempt) or fall through to next model
+        if (!e.isQuota && !e.isOverload) throw e;
       }
     }
   }
@@ -2762,30 +2863,37 @@ async function callGemini(userMessage) {
 
   let aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '...';
 
-  // Parse reminder JSON from AI response
+  // Parse reminder JSON from AI response (robust)
   let reminderCreated = null;
-  const rm = aiText.match(/<<<REMINDER>>>([\s\S]+?)<<<END>>>/);
-  if (rm) {
-    try {
-      const r = JSON.parse(rm[1].trim());
-      if (r.title) {
-        const rem = {
-          id: Date.now(),
-          title: r.title,
-          date: r.date || new Date().toISOString().split('T')[0],
-          time: r.time || '09:00',
-          details: r.details || ''
-        };
-        reminders.unshift(rem);
-        localStorage.setItem('mg_reminders', JSON.stringify(reminders));
-        scheduleReminderNotification(rem);
-        reminderCreated = rem;
-        renderStats(); renderHubReminders(); renderRemindersScreen();
-      }
-    } catch(e) { console.warn('reminder parse failed', e); }
-    aiText = aiText.replace(/<<<REMINDER>>>[\s\S]+?<<<END>>>/, '').trim();
-    if (reminderCreated) aiText += `\n\n⏰ נוספה תזכורת: ${reminderCreated.title} (${reminderCreated.date} ${reminderCreated.time})`;
+  const r = extractReminder(aiText);
+  if (r && r.title) {
+    normalizeReminderDateTime(r);
+    const rem = {
+      id: Date.now(),
+      title: r.title,
+      date: r.date || new Date().toISOString().split('T')[0],
+      time: r.time || '09:00',
+      details: r.details || ''
+    };
+    reminders.unshift(rem);
+    localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+    try { scheduleReminderNotification(rem); } catch(e){}
+    reminderCreated = rem;
+    try { renderStats(); renderHubReminders(); renderRemindersScreen(); } catch(e){}
   }
+  aiText = aiText.replace(/<<<REMINDER>>>[\s\S]+?<<<END>>>/, '').trim();
+  if (!reminderCreated) {
+    // Fallback: user asked "תזכיר לי..." but AI forgot JSON
+    const fb = fallbackReminderFromUtterance(userMessage);
+    if (fb) {
+      reminders.unshift(fb);
+      localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+      try { scheduleReminderNotification(fb); } catch(e){}
+      reminderCreated = fb;
+      try { renderStats(); renderHubReminders(); renderRemindersScreen(); } catch(e){}
+    }
+  }
+  if (reminderCreated) aiText += `\n\n⏰ נוספה תזכורת: ${reminderCreated.title} (${reminderCreated.date} ${reminderCreated.time})`;
 
   chatHistory.push({ role: 'model', parts: [{ text: aiText }] });
 
@@ -2796,6 +2904,264 @@ async function callGemini(userMessage) {
   }
 
   return { text: aiText, autoSaved: shouldSave };
+}
+
+/* ══ VOICE: STREAMING GEMINI + SENTENCE-BASED TTS QUEUE ══ */
+const _ttsQueue = (() => {
+  let chain = Promise.resolve();
+  let active = true;
+  return {
+    reset() { active = false; chain = Promise.resolve(); setTimeout(()=>{active=true;},50); },
+    enqueue(sentence) {
+      if (!active) return;
+      const s = (sentence||'').trim();
+      if (!s) return;
+      chain = chain.then(() => active ? speakTextAwait(s) : null).catch(()=>{});
+    },
+    done() { return chain; }
+  };
+})();
+
+async function _geminiStream(body, model, onDelta) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    const msg = err?.error?.message || `HTTP ${res.status}`;
+    const isQuota = msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED') || res.status === 429;
+    const isOverload = res.status === 503 || /overload|unavailable|high demand/i.test(msg);
+    throw Object.assign(new Error(msg), { isQuota, isOverload, status: res.status });
+  }
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', full = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const ln of lines) {
+      const line = ln.trim();
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      try {
+        const j = JSON.parse(payload);
+        const piece = j?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (piece) { full += piece; onDelta(piece, full); }
+      } catch(e) {}
+    }
+  }
+  return full;
+}
+
+function getVoiceSystemPrompt() {
+  const style = STYLES.find(s => s.id === currentStyle) || STYLES[0];
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const today = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+  const tomorrow = new Date(now.getTime()+86400000);
+  const tomStr = tomorrow.getFullYear()+'-'+pad(tomorrow.getMonth()+1)+'-'+pad(tomorrow.getDate());
+  const timeStr = pad(now.getHours())+':'+pad(now.getMinutes());
+  const dow = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][now.getDay()];
+  const uName = userNickname || userName || 'המשתמש';
+  return `אתה ${avatarName} — עוזר קולי אישי לאדם עם ADHD בשם ${uName}.
+התאריך כעת: ${today} ${timeStr} (יום ${dow}). מחר: ${tomStr}.
+
+כללי שיחה קולית:
+• תשובה קצרה מאוד: משפט אחד או שניים מקסימום.
+• ממוקדת: ענה ישירות, ללא פתיחה מיותרת, ללא "בוודאי"/"כמובן".
+• טון טבעי וחם. דיבור אנושי רגיל.
+• ללא אימוג'י, ללא markdown, ללא רשימות.
+• בעברית פשוטה ותקינה.
+${style.prompt ? '\nסגנון תגובה:\n' + style.prompt + '\n' : ''}
+תזכורות — חשוב מאוד!
+כשהמשתמש מבקש תזכורת/לזכור משהו, החזר בתשובה בלוק ב-EXACT הפורמט:
+<<<REMINDER>>>
+{"title":"...","date":"YYYY-MM-DD","time":"HH:MM"}
+<<<END>>>
+דוגמאות (השתמש בתאריכים אמיתיים!):
+- "תזכיר לי להתקשר לאמא מחר ב-3" → date:"${tomStr}", time:"15:00"
+- "תזכיר לי ב-8 בערב לקחת תרופה" → date:"${today}", time:"20:00" (או מחר אם כבר עבר)
+- "תזכיר לי בעוד שעה" → date:"${today}", time:"${pad((now.getHours()+1)%24)}:${pad(now.getMinutes())}"
+אחרי ה-JSON אמור משפט אישור קצר: "שמור! אזכיר לך".
+אם חסר זמן או תאריך, שאל שאלה אחת קצרה במקום ה-JSON.`;
+}
+
+// Trim chat history to last N messages (keeps latency low + context relevant)
+function _trimHistoryForVoice(arr, maxMsgs = 8) {
+  if (arr.length <= maxMsgs) return arr.slice();
+  return arr.slice(arr.length - maxMsgs);
+}
+
+async function callGeminiVoice(userMessage) {
+  try { detectNicknameChange(userMessage); } catch(e) {}
+  chatHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+  const trimmed = _trimHistoryForVoice(chatHistory, 8);
+
+  const body = {
+    system_instruction: { parts: [{ text: getVoiceSystemPrompt() }] },
+    contents: trimmed,
+    generationConfig: { temperature: 0.6, maxOutputTokens: 180 }
+  };
+
+  // Reset TTS queue for this turn
+  _ttsQueue.reset();
+  _vadSpeaking = true;
+  voiceOverlayStatus('מדבר... 🔊');
+
+  let full = '';
+  let spokenUpTo = 0;
+  const flushSentences = (accum) => {
+    // extract completed sentences (end in . ! ? \n)
+    const visible = accum.slice(spokenUpTo).replace(/<<<REMINDER>>>[\s\S]*?<<<END>>>/g,'');
+    let idx = 0, lastBreak = -1;
+    for (let i=0;i<visible.length;i++){
+      const c = visible[i];
+      if (c === '.' || c === '!' || c === '?' || c === '\n') lastBreak = i;
+    }
+    if (lastBreak >= 0) {
+      const chunk = visible.slice(0, lastBreak+1).trim();
+      if (chunk) _ttsQueue.enqueue(chunk);
+      spokenUpTo += lastBreak + 1;
+    }
+  };
+
+  let lastErr;
+  outer: for (const model of MODELS_VOICE) {
+    try {
+      full = await _geminiStream(body, model, (_piece, soFar) => {
+        // strip reminder block while accumulating
+        flushSentences(soFar);
+        // live overlay
+        voiceOverlayTranscript(soFar.replace(/<<<REMINDER>>>[\s\S]*?<<<END>>>/g,'').substring(0, 200));
+      });
+      break outer;
+    } catch(e) {
+      lastErr = e;
+      if (!e.isQuota && !e.isOverload && e.status !== 404) { /* non-retryable */ throw e; }
+      // try next model
+    }
+  }
+  if (!full) throw lastErr || new Error('No response');
+
+  // speak any tail that didn't end in punctuation
+  const tail = full.slice(spokenUpTo).replace(/<<<REMINDER>>>[\s\S]*?<<<END>>>/g,'').trim();
+  if (tail) _ttsQueue.enqueue(tail);
+
+  // Reminder handling — robust extract + normalize
+  const r = extractReminder(full);
+  let aiCleaned = full.replace(/<<<REMINDER>>>[\s\S]*?<<<END>>>/g,'').trim();
+  if (r && r.title) {
+    normalizeReminderDateTime(r);
+    const rem = {
+      id: Date.now(), title: r.title,
+      date: r.date || new Date().toISOString().split('T')[0],
+      time: r.time || '09:00', details: r.details || ''
+    };
+    reminders.unshift(rem);
+    localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+    try { scheduleReminderNotification(rem); } catch(e){}
+    try { renderStats(); renderHubReminders(); renderRemindersScreen && renderRemindersScreen(); } catch(e){}
+    toast('✅ תזכורת: ' + rem.title + ' ל-' + rem.date + ' ' + rem.time);
+    _ttsQueue.enqueue('נוספה תזכורת: ' + rem.title);
+  } else {
+    // Fallback: user said "תזכיר לי..." but AI didn't emit JSON
+    const fb = fallbackReminderFromUtterance(userMessage);
+    if (fb) {
+      reminders.unshift(fb);
+      localStorage.setItem('mg_reminders', JSON.stringify(reminders));
+      try { scheduleReminderNotification(fb); } catch(e){}
+      try { renderStats(); renderHubReminders(); renderRemindersScreen && renderRemindersScreen(); } catch(e){}
+      toast('✅ תזכורת: ' + fb.title + ' ל-' + fb.date + ' ' + fb.time);
+      _ttsQueue.enqueue('נוספה תזכורת: ' + fb.title);
+    }
+  }
+
+  chatHistory.push({ role: 'model', parts: [{ text: aiCleaned }] });
+
+  await _ttsQueue.done();
+  _vadSpeaking = false;
+}
+
+/* ══ REMINDER EXTRACTION (robust) ══ */
+function extractReminder(aiText) {
+  if (!aiText) return null;
+  const m = aiText.match(/<<<REMINDER>>>([\s\S]+?)<<<END>>>/);
+  if (!m) return null;
+  const raw = m[1].trim();
+  try { return JSON.parse(raw); } catch(e) {}
+  // Lenient regex parse
+  const g = (re) => { const mm = raw.match(re); return mm ? mm[1] : null; };
+  const title = g(/"title"\s*:\s*"([^"]+)"/);
+  const date  = g(/"date"\s*:\s*"([^"]+)"/);
+  const time  = g(/"time"\s*:\s*"([^"]+)"/);
+  const details = g(/"details"\s*:\s*"([^"]+)"/);
+  if (!title && !date && !time) return null;
+  return { title: title||'תזכורת', date, time, details };
+}
+
+function normalizeReminderDateTime(r) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  if (r.date) {
+    const d = String(r.date).trim();
+    if (/^מחר$/i.test(d) || /tomorrow/i.test(d)) r.date = fmt(new Date(now.getTime()+86400000));
+    else if (/^היום$/i.test(d) || /today/i.test(d)) r.date = fmt(now);
+    else if (/^אתמול$/i.test(d) || /yesterday/i.test(d)) r.date = fmt(new Date(now.getTime()-86400000));
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      // DD/MM or DD-MM → this year
+      const mm = d.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+      if (mm) {
+        const Y = mm[3] ? (mm[3].length===2 ? 2000+parseInt(mm[3]) : parseInt(mm[3])) : now.getFullYear();
+        r.date = Y+'-'+pad(parseInt(mm[2]))+'-'+pad(parseInt(mm[1]));
+      } else r.date = fmt(now);
+    }
+  } else r.date = fmt(now);
+  if (r.time) {
+    const t = String(r.time).trim();
+    const m = t.match(/^(\d{1,2}):?(\d{2})?$/);
+    if (m) r.time = pad(parseInt(m[1]))+':'+(m[2]||'00');
+    else if (/עוד שעה|in an hour/i.test(t)) {
+      const n = new Date(now.getTime()+3600000); r.time = pad(n.getHours())+':'+pad(n.getMinutes());
+    }
+  } else r.time = '09:00';
+}
+
+function fallbackReminderFromUtterance(text) {
+  if (!text) return null;
+  if (!/תזכיר|תזכורת|להזכיר/i.test(text)) return null;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  let date = fmt(now);
+  if (/מחר/.test(text)) date = fmt(new Date(now.getTime()+86400000));
+  if (/מחרתיים/.test(text)) date = fmt(new Date(now.getTime()+2*86400000));
+  // parse time "ב-15:30" / "ב-3" / "ב-8 בערב"
+  let time = null;
+  let mt = text.match(/ב[-–\s]*(\d{1,2}):(\d{2})/);
+  if (mt) time = pad(parseInt(mt[1]))+':'+mt[2];
+  else {
+    mt = text.match(/ב[-–\s]*(\d{1,2})(?:\s+(בערב|בבוקר|בצהריים|אחה"צ|אחר הצהריים|בלילה))?/);
+    if (mt) {
+      let h = parseInt(mt[1]);
+      const qual = mt[2] || '';
+      if (/ערב|לילה|אחה|אחר/.test(qual) && h < 12) h += 12;
+      if (/בוקר/.test(qual) && h === 12) h = 0;
+      time = pad(h)+':00';
+    }
+  }
+  if (/עוד שעה/.test(text)) { const n = new Date(now.getTime()+3600000); time = pad(n.getHours())+':'+pad(n.getMinutes()); }
+  if (!time) return null; // don't guess if no time
+  // Extract title: strip reminder trigger words
+  let title = text.replace(/^(תזכיר לי ל?|תזכיר ל?|תזכורת ל?|להזכיר לי ל?)/,'').trim();
+  title = title.replace(/\s*מחר\s*/,' ').replace(/\s*היום\s*/,' ').replace(/\s*מחרתיים\s*/,' ');
+  title = title.replace(/ב[-–\s]*\d{1,2}(?::\d{2})?(?:\s*(?:בערב|בבוקר|בצהריים|אחה"צ|אחר הצהריים|בלילה))?/,'').trim();
+  title = title.replace(/\s+/g,' ').trim();
+  if (!title) title = 'תזכורת';
+  return { id: Date.now(), title, date, time, details: '' };
 }
 
 function sendMsg() {
