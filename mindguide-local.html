@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MindGuide v1.0.2 -->
+<!-- MindGuide v1.0.3 -->
 <html dir="rtl" lang="he">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>MindGuide v1.0.2</title>
+<title>MindGuide v1.0.3</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e0e12">
 <meta name="mobile-web-app-capable" content="yes">
@@ -979,7 +979,7 @@ body {
   </div>
   <div class="header">
     <div>
-      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.2</span></div>
+      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.3</span></div>
       <div class="header-sub" id="greetEl">שלום! 👋</div>
     </div>
     <div class="hbtns">
@@ -1233,7 +1233,7 @@ body {
         <div class="profile-name" id="settingsUserName">אורח</div>
         <div class="profile-sub" id="settingsAvatarName">MindGuide</div>
       </div>
-      <div class="api-badge" id="settingsVersionBadge">v1.0.2</div>
+      <div class="api-badge" id="settingsVersionBadge">v1.0.3</div>
     </div>
 
     <div class="section-label">סגנון שיחה</div>
@@ -1359,7 +1359,7 @@ body {
       <div class="row-item">
         <div class="icon-tile" style="background:#EAF4FF">🏷️</div>
         <div class="row-main">
-          <div class="row-title">גרסה <span id="appVersionLabel">1.0.2</span></div>
+          <div class="row-title">גרסה <span id="appVersionLabel">1.0.3</span></div>
           <div class="row-sub" id="updateStatusSub">לחץ כדי לבדוק עדכונים</div>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:7px 11px" onclick="checkForUpdates()">חפש עדכונים</button>
@@ -1376,7 +1376,7 @@ body {
     </div>
 
     <div style="text-align:center;padding:4px 20px 16px;font-size:11px;color:var(--text-3)">
-      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.2</span>
+      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.3</span>
     </div>
   </div>
 </div>
@@ -1883,25 +1883,42 @@ let _vadBusy = false;     // true while we're calling Gemini+TTS
 
 function _voiceLoopTick() {
   if (!_voiceLoopActive) return;
+  if (_vadBusy || _vadSpeaking) return;        // guard: don't spawn while busy
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} }
+  // Mark old recognizer as intentionally aborted so its onend won't respawn
+  if (_voiceRecognition) {
+    _voiceRecognition._aborted = true;
+    try { _voiceRecognition.abort(); } catch(e){}
+  }
   const rec = new SR();
+  rec._aborted = false;
   _voiceRecognition = rec;
   rec.lang = 'he-IL';
-  rec.continuous = true;     // NEVER stop listening mid-sentence
+  rec.continuous = true;
   rec.interimResults = true;
-  rec.maxAlternatives = 3;
+  rec.maxAlternatives = 1;        // alternatives blow up duplication on Android
   _vadBuffer = '';
   if (_silenceTimer) { clearTimeout(_silenceTimer); _silenceTimer = null; }
 
+  // Track final + interim separately to avoid joining cumulative duplicates
+  let finalAcc = '';
+  let interimAcc = '';
+
   rec.onstart = () => { _voiceErrorCount = 0; if (!_vadBusy && !_vadSpeaking) voiceOverlayStatus('מקשיב... 🎙️'); };
   rec.onresult = (e) => {
-    if (_vadSpeaking || _vadBusy) return; // ignore while AI talks
-    const t = Array.from(e.results).map(r=>r[0].transcript).join('');
-    _vadBuffer = t;
-    voiceOverlayTranscript(t);
+    if (_vadSpeaking || _vadBusy) return;
+    // Only iterate NEW results (e.resultIndex onwards) to avoid duplication.
+    interimAcc = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const seg = e.results[i][0]?.transcript || '';
+      if (e.results[i].isFinal) finalAcc += (finalAcc ? ' ' : '') + seg.trim();
+      else interimAcc = seg;
+    }
+    const combined = (finalAcc + ' ' + interimAcc).replace(/\s+/g,' ').trim();
+    _vadBuffer = combined;
+    voiceOverlayTranscript(combined);
     if (_silenceTimer) clearTimeout(_silenceTimer);
-    _silenceTimer = setTimeout(_vadFireSend, 900);
+    if (combined) _silenceTimer = setTimeout(_vadFireSend, 900);
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'permission-denied') {
@@ -1915,24 +1932,26 @@ function _voiceLoopTick() {
       stopVoiceConversation();
       return;
     }
+    if (e.error === 'aborted') return; // intentional, don't count
     _voiceErrorCount++;
     if (_voiceErrorCount > 5) {
       toast('⚠️ שיחה קולית הופסקה (יותר מדי שגיאות)');
       stopVoiceConversation();
       return;
     }
-    // benign (no-speech / aborted) — restart shortly
-    if (_voiceLoopActive && !_vadSpeaking && !_vadBusy) setTimeout(_voiceLoopTick, 500);
   };
   rec.onend = () => {
-    // continuous session ended (mic auto-off after ~60s on some browsers) — restart if still active
+    // Only restart if (a) still active, (b) not busy/speaking, (c) this rec wasn't intentionally aborted, (d) it's still the current recognizer
     if (!_voiceLoopActive) return;
-    if (!_vadSpeaking && !_vadBusy) setTimeout(_voiceLoopTick, 200);
+    if (rec._aborted) return;
+    if (_vadBusy || _vadSpeaking) return;
+    if (_voiceRecognition !== rec) return;
+    setTimeout(_voiceLoopTick, 250);
   };
   try { rec.start(); } catch(e) {
     _voiceErrorCount++;
     if (_voiceErrorCount > 5) { stopVoiceConversation(); return; }
-    setTimeout(() => { if (_voiceLoopActive) _voiceLoopTick(); }, 500);
+    setTimeout(() => { if (_voiceLoopActive && !_vadBusy && !_vadSpeaking) _voiceLoopTick(); }, 500);
   }
 }
 
@@ -1947,16 +1966,23 @@ async function _vadFireSend() {
   _vadBusy = true;
   voiceOverlayStatus('חושב... 🤔');
   // Pause STT while we process + speak
-  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
+  if (_voiceRecognition) {
+    _voiceRecognition._aborted = true;
+    try { _voiceRecognition.abort(); } catch(e){}
+    _voiceRecognition = null;
+  }
   try {
     await callGeminiVoice(txt);
   } catch(e) {
     _voiceErrorCount++;
-    voiceOverlayStatus('שגיאה — מנסה שוב');
-    if (_voiceErrorCount > 3) { stopVoiceConversation(); return; }
+    const msg = (e?.message || '').substring(0, 80);
+    voiceOverlayStatus('שגיאה: ' + msg);
+    voiceOverlayTranscript('בדוק שגיאה בצ\'אט הרגיל לפרטים');
+    console.error('[voice] gemini error', e);
+    if (_voiceErrorCount > 2) { toast('⚠️ שיחה הופסקה — שגיאה: ' + msg); stopVoiceConversation(); return; }
+    await new Promise(r => setTimeout(r, 1500));
   } finally {
     _vadBusy = false;
-    // Resume listening immediately
     if (_voiceLoopActive) { voiceOverlayStatus('מקשיב... 🎙️'); _voiceLoopTick(); }
   }
 }
@@ -1966,7 +1992,7 @@ function stopVoiceConversation() {
   voiceModeActive = false;
   if (_silenceTimer) { clearTimeout(_silenceTimer); _silenceTimer = null; }
   _vadBusy = false; _vadSpeaking = false; _vadBuffer = '';
-  if (_voiceRecognition) { try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
+  if (_voiceRecognition) { _voiceRecognition._aborted = true; try { _voiceRecognition.abort(); } catch(e){} _voiceRecognition = null; }
   if (window.speechSynthesis) speechSynthesis.cancel();
   if (typeof _currentAudio !== 'undefined' && _currentAudio) { try{_currentAudio.pause();}catch(e){} _currentAudio = null; }
   if (typeof _ttsQueue !== 'undefined') _ttsQueue.reset();
@@ -2009,7 +2035,7 @@ const SYSTEM_PROMPT = `אתה MindGuide — עוזר AI חכם ואמפתי שנ
 היה אסטרטג, לא רק מאזין. הצע פעולות ספציפיות.`;
 
 /* ══ VERSION ══ */
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 // Live version check from GitHub Pages — bypasses CDN with cache-bust query param.
 const VERSION_CHECK_URL = 'https://eldadabadi-ux.github.io/mindguide/version.txt';
 
