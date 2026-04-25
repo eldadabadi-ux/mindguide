@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MindGuide v1.0.1 -->
+<!-- MindGuide v1.0.2 -->
 <html dir="rtl" lang="he">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>MindGuide v1.0.1</title>
+<title>MindGuide v1.0.2</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e0e12">
 <meta name="mobile-web-app-capable" content="yes">
@@ -979,7 +979,7 @@ body {
   </div>
   <div class="header">
     <div>
-      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.1</span></div>
+      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.2</span></div>
       <div class="header-sub" id="greetEl">שלום! 👋</div>
     </div>
     <div class="hbtns">
@@ -1233,7 +1233,7 @@ body {
         <div class="profile-name" id="settingsUserName">אורח</div>
         <div class="profile-sub" id="settingsAvatarName">MindGuide</div>
       </div>
-      <div class="api-badge" id="settingsVersionBadge">v1.0.1</div>
+      <div class="api-badge" id="settingsVersionBadge">v1.0.2</div>
     </div>
 
     <div class="section-label">סגנון שיחה</div>
@@ -1359,7 +1359,7 @@ body {
       <div class="row-item">
         <div class="icon-tile" style="background:#EAF4FF">🏷️</div>
         <div class="row-main">
-          <div class="row-title">גרסה <span id="appVersionLabel">1.0.1</span></div>
+          <div class="row-title">גרסה <span id="appVersionLabel">1.0.2</span></div>
           <div class="row-sub" id="updateStatusSub">לחץ כדי לבדוק עדכונים</div>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:7px 11px" onclick="checkForUpdates()">חפש עדכונים</button>
@@ -1376,7 +1376,7 @@ body {
     </div>
 
     <div style="text-align:center;padding:4px 20px 16px;font-size:11px;color:var(--text-3)">
-      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.1</span>
+      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.2</span>
     </div>
   </div>
 </div>
@@ -2009,7 +2009,7 @@ const SYSTEM_PROMPT = `אתה MindGuide — עוזר AI חכם ואמפתי שנ
 היה אסטרטג, לא רק מאזין. הצע פעולות ספציפיות.`;
 
 /* ══ VERSION ══ */
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 // Live version check from GitHub Pages — bypasses CDN with cache-bust query param.
 const VERSION_CHECK_URL = 'https://eldadabadi-ux.github.io/mindguide/version.txt';
 
@@ -3218,15 +3218,22 @@ function sendMsg() {
     typEl.classList.remove('show');
     sendBtn.disabled = false;
     document.getElementById('compStatus').textContent = 'שגיאה ⚠️';
-    // Friendly Hebrew error message
-    let friendly = err.message;
+    // Friendly Hebrew error message — but ALWAYS append the raw error for debugging
+    const raw = err.message || String(err);
+    let friendly = raw;
     if (err.isOverload) friendly = 'המודל עמוס כרגע 🥵 נסה שוב בעוד כמה שניות.';
     else if (err.isQuota) friendly = 'חרגת ממכסת השימוש ל-Gemini. נסה שוב בעוד כמה דקות.';
-    else if (err.message?.includes('API key')) friendly = 'בעיה במפתח ה-API של Gemini.';
-    else if (err.message?.includes('network') || err.message?.includes('Failed to fetch')) friendly = 'אין חיבור לאינטרנט 📡';
+    else if (/API key not valid|API_KEY_INVALID/i.test(raw)) friendly = 'מפתח ה-API לא תקף. בדוק שהעתקת אותו נכון בהגדרות.';
+    else if (/referer|referrer|REFERER|http_referrer/i.test(raw)) friendly = '⚠️ הגבלת Referrer חוסמת את הבקשה. ב-Google Cloud Console → Credentials → המפתח שלך → ב-"Application restrictions" בחר "None" (או הוסף את https://eldadabadi-ux.github.io/* לרשימה).';
+    else if (/permission|PERMISSION_DENIED|forbidden|403/i.test(raw)) friendly = '🔒 גישה נחסמה (403). כנראה הגבלת Referrer/IP על המפתח. עבור ל-Google Cloud Console והסר הגבלות, או הוסף https://eldadabadi-ux.github.io/* לרשימה.';
+    else if (/API key/i.test(raw)) friendly = 'בעיה במפתח ה-API של Gemini: ' + raw;
+    else if (/network|Failed to fetch/i.test(raw)) friendly = 'אין חיבור לאינטרנט 📡';
+    // Show raw error in small text for diagnosis
+    const debugLine = '\n\n[debug] ' + raw.substring(0, 300);
     const ab = document.createElement('div');
     ab.innerHTML = `<div class="bubble bubble-ai" style="border-color:#fca5a5;background:#fff5f5">
       <span style="color:var(--red)">⚠️ ${escHtml(friendly)}</span>
+      <div style="font-size:10px;color:#888;margin-top:6px;font-family:monospace;word-break:break-all">${escHtml(debugLine)}</div>
       <div class="bubble-time">${nowTime()}</div>
     </div>`;
     list.insertBefore(ab, typEl);
