@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MindGuide v1.0.3 -->
+<!-- MindGuide v1.0.4 -->
 <html dir="rtl" lang="he">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>MindGuide v1.0.3</title>
+<title>MindGuide v1.0.4</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e0e12">
 <meta name="mobile-web-app-capable" content="yes">
@@ -979,7 +979,7 @@ body {
   </div>
   <div class="header">
     <div>
-      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.3</span></div>
+      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.4</span></div>
       <div class="header-sub" id="greetEl">שלום! 👋</div>
     </div>
     <div class="hbtns">
@@ -1233,7 +1233,7 @@ body {
         <div class="profile-name" id="settingsUserName">אורח</div>
         <div class="profile-sub" id="settingsAvatarName">MindGuide</div>
       </div>
-      <div class="api-badge" id="settingsVersionBadge">v1.0.3</div>
+      <div class="api-badge" id="settingsVersionBadge">v1.0.4</div>
     </div>
 
     <div class="section-label">סגנון שיחה</div>
@@ -1359,7 +1359,7 @@ body {
       <div class="row-item">
         <div class="icon-tile" style="background:#EAF4FF">🏷️</div>
         <div class="row-main">
-          <div class="row-title">גרסה <span id="appVersionLabel">1.0.3</span></div>
+          <div class="row-title">גרסה <span id="appVersionLabel">1.0.4</span></div>
           <div class="row-sub" id="updateStatusSub">לחץ כדי לבדוק עדכונים</div>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:7px 11px" onclick="checkForUpdates()">חפש עדכונים</button>
@@ -1376,7 +1376,7 @@ body {
     </div>
 
     <div style="text-align:center;padding:4px 20px 16px;font-size:11px;color:var(--text-3)">
-      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.3</span>
+      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.4</span>
     </div>
   </div>
 </div>
@@ -2001,8 +2001,7 @@ function stopVoiceConversation() {
 }
 
 /* ══ STATE ══ */
-let apiKey = localStorage.getItem('mg_api_key') || 'AIzaSyB71AFwM7BX5y_15-n4Xk1WwA5sv0WanhU';
-if (apiKey && !localStorage.getItem('mg_api_key')) localStorage.setItem('mg_api_key', apiKey);
+let apiKey = localStorage.getItem('mg_api_key') || '';
 let memories = JSON.parse(localStorage.getItem('mg_memories') || '[]');
 let reminders = JSON.parse(localStorage.getItem('mg_reminders') || '[]');
 let chatHistory = []; // [{role:'user'|'model', parts:[{text}]}]
@@ -2035,7 +2034,7 @@ const SYSTEM_PROMPT = `אתה MindGuide — עוזר AI חכם ואמפתי שנ
 היה אסטרטג, לא רק מאזין. הצע פעולות ספציפיות.`;
 
 /* ══ VERSION ══ */
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 // Live version check from GitHub Pages — bypasses CDN with cache-bust query param.
 const VERSION_CHECK_URL = 'https://eldadabadi-ux.github.io/mindguide/version.txt';
 
@@ -2065,9 +2064,26 @@ async function checkForUpdates() {
 }
 
 /* ══ TTS API KEY ══ */
-// User must replace with their Google Cloud TTS API key for Hebrew WaveNet.
+// Stored in localStorage. Defaults to the Gemini key (often the same Google Cloud project enables both APIs).
 // If empty or fails, the app falls back to browser SpeechSynthesis automatically.
-const GCP_TTS_API_KEY = 'AIzaSyCtXjbbKD9SaWjL2Sxumc1HF77efyHACqg';
+function GCP_TTS_API_KEY_get() {
+  return localStorage.getItem('mg_tts_key') || apiKey || '';
+}
+// Backwards-compatible read (some legacy code references the constant)
+Object.defineProperty(window, 'GCP_TTS_API_KEY', { get: GCP_TTS_API_KEY_get });
+
+function setTtsApiKey(k) {
+  k = (k || '').trim();
+  if (k) localStorage.setItem('mg_tts_key', k);
+  else localStorage.removeItem('mg_tts_key');
+  toast(k ? '✅ מפתח TTS נשמר' : 'מפתח TTS נמחק');
+}
+function promptTtsApiKey() {
+  const cur = localStorage.getItem('mg_tts_key') || '';
+  const k = prompt('מפתח Google Cloud TTS (השאר ריק כדי להשתמש במפתח Gemini):', cur);
+  if (k === null) return;
+  setTtsApiKey(k);
+}
 
 /* ══ AVATAR ══ */
 const AVATAR_COLORS = ['b6e3f4','c0aede','d1d4f9','ffd5dc','ffdfbf','c1e1c1','fcd5ce','a3c4bc','f4978e','fde2a7'];
