@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MindGuide v1.0.4 -->
+<!-- MindGuide v1.0.5 -->
 <html dir="rtl" lang="he">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>MindGuide v1.0.4</title>
+<title>MindGuide v1.0.5</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e0e12">
 <meta name="mobile-web-app-capable" content="yes">
@@ -979,7 +979,7 @@ body {
   </div>
   <div class="header">
     <div>
-      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.4</span></div>
+      <div class="header-title">MindGuide <span style="font-size:11px;font-weight:600;color:var(--text-3);background:var(--canvas);padding:2px 7px;border-radius:8px;vertical-align:middle">v1.0.5</span></div>
       <div class="header-sub" id="greetEl">שלום! 👋</div>
     </div>
     <div class="hbtns">
@@ -1233,7 +1233,7 @@ body {
         <div class="profile-name" id="settingsUserName">אורח</div>
         <div class="profile-sub" id="settingsAvatarName">MindGuide</div>
       </div>
-      <div class="api-badge" id="settingsVersionBadge">v1.0.4</div>
+      <div class="api-badge" id="settingsVersionBadge">v1.0.5</div>
     </div>
 
     <div class="section-label">סגנון שיחה</div>
@@ -1359,7 +1359,7 @@ body {
       <div class="row-item">
         <div class="icon-tile" style="background:#EAF4FF">🏷️</div>
         <div class="row-main">
-          <div class="row-title">גרסה <span id="appVersionLabel">1.0.4</span></div>
+          <div class="row-title">גרסה <span id="appVersionLabel">1.0.5</span></div>
           <div class="row-sub" id="updateStatusSub">לחץ כדי לבדוק עדכונים</div>
         </div>
         <button class="btn btn-ghost" style="font-size:12px;padding:7px 11px" onclick="checkForUpdates()">חפש עדכונים</button>
@@ -1376,7 +1376,7 @@ body {
     </div>
 
     <div style="text-align:center;padding:4px 20px 16px;font-size:11px;color:var(--text-3)">
-      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.4</span>
+      MindGuide Local · Gemini 2.5 Flash · v<span id="footerVersion">1.0.5</span>
     </div>
   </div>
 </div>
@@ -2034,7 +2034,7 @@ const SYSTEM_PROMPT = `אתה MindGuide — עוזר AI חכם ואמפתי שנ
 היה אסטרטג, לא רק מאזין. הצע פעולות ספציפיות.`;
 
 /* ══ VERSION ══ */
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 // Live version check from GitHub Pages — bypasses CDN with cache-bust query param.
 const VERSION_CHECK_URL = 'https://eldadabadi-ux.github.io/mindguide/version.txt';
 
@@ -3337,6 +3337,26 @@ function formatTime(iso) {
 }
 
 /* ══ AUTO-START ══ */
+// Accept API key via URL parameter (?setKey=AIza...) for one-click setup links.
+// After storing the key we strip it from the URL so it doesn't linger in browser history.
+(function handleUrlKey(){
+  try {
+    const url = new URL(window.location.href);
+    const k = (url.searchParams.get('setKey') || '').trim();
+    if (k && /^AIza[A-Za-z0-9_-]{20,}$/.test(k)) {
+      localStorage.setItem('mg_api_key', k);
+      apiKey = k;
+      // Optional: same key for TTS too (works if both APIs enabled on same project)
+      if (!localStorage.getItem('mg_tts_key')) localStorage.setItem('mg_tts_key', k);
+      url.searchParams.delete('setKey');
+      url.searchParams.set('v','1.0.5');
+      history.replaceState({}, '', url.toString());
+      // Tiny toast equivalent (toast() not yet available pre-init)
+      setTimeout(() => { try { toast('✅ המפתח הוטמע אוטומטית'); } catch(e){} }, 800);
+    }
+  } catch(e) { /* ignore URL parsing errors */ }
+})();
+
 if (apiKey) {
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('phone').style.display = 'flex';
